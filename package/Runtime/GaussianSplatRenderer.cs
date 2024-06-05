@@ -43,6 +43,8 @@ namespace GaussianSplatting.Runtime
 
         public void UnregisterSplat(GaussianSplatRenderer r)
         {
+            r.DisposeTempBuffers();
+
             if (!m_Splats.ContainsKey(r))
                 return;
             m_Splats.Remove(r);
@@ -108,6 +110,8 @@ namespace GaussianSplatting.Runtime
                 var gs = kvp.Item1;
                 matComposite = gs.m_MatComposite;
                 var mpb = kvp.Item2;
+
+                gs.DisposeTempBuffers();
 
                 // sort
                 var matrix = gs.transform.localToWorldMatrix;
@@ -204,6 +208,13 @@ namespace GaussianSplatting.Runtime
     [ExecuteInEditMode]
     public class GaussianSplatRenderer : MonoBehaviour
     {
+        public enum SortMode
+        {
+            Default,
+            Radix,
+            FFX
+        }
+
         public enum RenderMode
         {
             Splats,
@@ -226,6 +237,8 @@ namespace GaussianSplatting.Runtime
         [Range(1,30)] [Tooltip("Sort splats only every N frames")]
         public int m_SortNthFrame = 1;
 
+        public SortMode m_SortMode = SortMode.Default;
+
         public RenderMode m_RenderMode = RenderMode.Splats;
         [Range(1.0f,15.0f)] public float m_PointDisplaySize = 3.0f;
 
@@ -236,7 +249,8 @@ namespace GaussianSplatting.Runtime
         public Shader m_ShaderDebugPoints;
         public Shader m_ShaderDebugBoxes;
         [Tooltip("Gaussian splatting compute shader")]
-        public ComputeShader m_CSSplatUtilities;
+        public ComputeShader m_CSSplatUtilitiesRadix;
+        public ComputeShader m_CSSplatUtilitiesFFX;
 
         int m_SplatCount; // initially same as asset splat count, but editing can change this
         GraphicsBuffer m_GpuSortDistances;
@@ -272,6 +286,8 @@ namespace GaussianSplatting.Runtime
         Hash128 m_PrevHash;
 
         static readonly ProfilerMarker s_ProfSort = new(ProfilerCategory.Render, "GaussianSplat.Sort", MarkerFlags.SampleGPU);
+
+        internal List<GraphicsBuffer> m_TempBuffers = new List<GraphicsBuffer>();
 
         internal static class Props
         {
@@ -358,6 +374,17 @@ namespace GaussianSplatting.Runtime
 
         const int kGpuViewDataSize = 40;
 
+        internal void DisposeTempBuffers()
+        {
+            foreach (var buffer in m_TempBuffers)
+            {
+                buffer.Dispose();
+            }
+            m_TempBuffers.Clear();
+
+            m_Sorter.DisposeTempBuffers();
+        }
+
         void CreateResourcesForAsset()
         {
             if (!HasValidAsset)
@@ -408,11 +435,17 @@ namespace GaussianSplatting.Runtime
             InitSortBuffers(splatCount);
         }
 
+        bool IsRadixSupported => (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D12 || SystemInfo.graphicsDeviceType == GraphicsDeviceType.Vulkan);
+
+        internal SortMode GetSortMode() => !IsRadixSupported ? SortMode.FFX : m_SortMode == SortMode.Default ? SortMode.Radix : m_SortMode;
+
+        ComputeShader m_CSSplatUtilities => GetSortMode() == SortMode.Radix ? m_CSSplatUtilitiesRadix : m_CSSplatUtilitiesFFX;
+
         void InitSortBuffers(int count)
         {
             m_GpuSortDistances?.Dispose();
             m_GpuSortKeys?.Dispose();
-            m_SorterArgs.resources.Dispose();
+            m_SorterArgs.resources?.Dispose();
 
             m_GpuSortDistances = new GraphicsBuffer(GraphicsBuffer.Target.Structured, count, 4) { name = "GaussianSplatSortDistances" };
             m_GpuSortKeys = new GraphicsBuffer(GraphicsBuffer.Target.Structured, count, 4) { name = "GaussianSplatSortIndices" };
@@ -427,7 +460,19 @@ namespace GaussianSplatting.Runtime
             m_SorterArgs.inputValues = m_GpuSortKeys;
             m_SorterArgs.count = (uint)count;
             if (m_Sorter.Valid)
-                m_SorterArgs.resources = GpuSorting.SupportResources.Load((uint)count);
+            {
+                if (GetSortMode() == SortMode.Radix)
+                    m_SorterArgs.resources = GpuSortingRadix.SupportResourcesRadix.Load((uint)count);
+                else
+                    m_SorterArgs.resources = GpuSortingFFX.SupportResourcesFFX.Load((uint)count);
+            }
+        }
+
+        public void Reset(int value)
+        {
+            m_SortMode = value == 0 ? SortMode.Default : value == 1 ? SortMode.Radix : SortMode.FFX;
+            OnDisable();
+            OnEnable();
         }
 
         public void OnEnable()
@@ -435,6 +480,7 @@ namespace GaussianSplatting.Runtime
             m_FrameCounter = 0;
             if (m_ShaderSplats == null || m_ShaderComposite == null || m_ShaderDebugPoints == null || m_ShaderDebugBoxes == null || m_CSSplatUtilities == null)
                 return;
+
             if (!SystemInfo.supportsComputeShaders)
                 return;
 
@@ -443,7 +489,15 @@ namespace GaussianSplatting.Runtime
             m_MatDebugPoints = new Material(m_ShaderDebugPoints) {name = "GaussianDebugPoints"};
             m_MatDebugBoxes = new Material(m_ShaderDebugBoxes) {name = "GaussianDebugBoxes"};
 
-            m_Sorter = new GpuSorting(m_CSSplatUtilities);
+            if (m_Sorter != null)
+            {
+                m_Sorter.DisposeTempBuffers();
+            }
+
+            if (GetSortMode() == SortMode.Radix)
+                m_Sorter = new GpuSortingRadix(m_CSSplatUtilitiesRadix);
+            else
+                m_Sorter = new GpuSortingFFX(m_CSSplatUtilitiesFFX);
             GaussianSplatRenderSystem.instance.RegisterSplat(this);
 
             CreateResourcesForAsset();
@@ -458,8 +512,44 @@ namespace GaussianSplatting.Runtime
             cmb.SetComputeBufferParam(cs, kernelIndex, Props.SplatOther, m_GpuOtherData);
             cmb.SetComputeBufferParam(cs, kernelIndex, Props.SplatSH, m_GpuSHData);
             cmb.SetComputeTextureParam(cs, kernelIndex, Props.SplatColor, m_GpuColorData);
-            cmb.SetComputeBufferParam(cs, kernelIndex, Props.SplatSelectedBits, m_GpuEditSelected ?? m_GpuPosData);
-            cmb.SetComputeBufferParam(cs, kernelIndex, Props.SplatDeletedBits, m_GpuEditDeleted ?? m_GpuPosData);
+
+            // WebGPU does not allow the same buffer to be bound twice, for both read and write access
+            //var copyReadBuffers = SystemInfo.graphicsDeviceType == GraphicsDeviceType.WebGPU;
+            var copyReadBuffers = true;
+
+            if (copyReadBuffers && m_GpuEditSelected == null)
+            {
+                var src = m_GpuPosData;
+                var dst = new GraphicsBuffer(
+                    src.target | GraphicsBuffer.Target.CopyDestination,
+                    src.count, src.stride);
+                dst.name = "SplatDeletedBits_READ";
+                m_TempBuffers.Add(dst);
+                cmb.CopyBuffer(m_GpuPosData, dst);
+
+                cmb.SetComputeBufferParam(cs, kernelIndex, Props.SplatSelectedBits, dst);;
+            }
+            else
+            {
+                cmb.SetComputeBufferParam(cs, kernelIndex, Props.SplatSelectedBits, m_GpuEditSelected ?? m_GpuPosData);
+            }
+
+            if (copyReadBuffers && m_GpuEditDeleted == null)
+            {
+                var src = m_GpuPosData;
+                var dst = new GraphicsBuffer(
+                    src.target | GraphicsBuffer.Target.CopyDestination,
+                    src.count, src.stride);
+                dst.name = "SplatDeletedBits_READ";
+                m_TempBuffers.Add(dst);
+                cmb.CopyBuffer(m_GpuPosData, dst);
+
+                cmb.SetComputeBufferParam(cs, kernelIndex, Props.SplatDeletedBits, dst);
+            }
+            else
+            {
+                cmb.SetComputeBufferParam(cs, kernelIndex, Props.SplatDeletedBits, m_GpuEditDeleted ?? m_GpuPosData);
+            }
             cmb.SetComputeBufferParam(cs, kernelIndex, Props.SplatViewData, m_GpuView);
             cmb.SetComputeBufferParam(cs, kernelIndex, Props.OrderBuffer, m_GpuSortKeys);
 
@@ -517,7 +607,7 @@ namespace GaussianSplatting.Runtime
             DisposeBuffer(ref m_GpuEditCountsBounds);
             DisposeBuffer(ref m_GpuEditCutouts);
 
-            m_SorterArgs.resources.Dispose();
+            m_SorterArgs.resources?.Dispose();
 
             m_SplatCount = 0;
             m_GpuChunksValid = false;

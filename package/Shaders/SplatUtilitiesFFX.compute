@@ -17,18 +17,15 @@
 #pragma kernel CSExportData
 #pragma kernel CSCopySplats
 
-// DeviceRadixSort
-#pragma kernel InitDeviceRadixSort
-#pragma kernel Upsweep
-#pragma kernel Scan
-#pragma kernel Downsweep
+// FidelityFX GPU sorting
+#pragma kernel FfxParallelSortReduce
+#pragma kernel FfxParallelSortScanAdd
+#pragma kernel FfxParallelSortScan
+#pragma kernel FfxParallelSortScatter
+#pragma kernel FfxParallelSortCount
 
-// GPU sorting needs wave ops
-#pragma require wavebasic
 
-#pragma use_dxc
-
-#include "DeviceRadixSort.hlsl"
+#include "GpuSortFidelityFX.hlsl"
 #include "GaussianSplatting.hlsl"
 
 float4x4 _MatrixObjectToWorld;
@@ -53,7 +50,7 @@ uint FloatToSortableUint(float f)
 }
 
 [numthreads(GROUP_SIZE,1,1)]
-void CSSetIndices (uint3 id : SV_DispatchThreadID)
+void CSSetIndices(uint3 id : SV_DispatchThreadID)
 {
     uint idx = id.x;
     if (idx >= _SplatCount)
@@ -63,7 +60,7 @@ void CSSetIndices (uint3 id : SV_DispatchThreadID)
 }
 
 [numthreads(GROUP_SIZE,1,1)]
-void CSCalcDistances (uint3 id : SV_DispatchThreadID)
+void CSCalcDistances(uint3 id : SV_DispatchThreadID)
 {
     uint idx = id.x;
     if (idx >= _SplatCount)
@@ -177,13 +174,13 @@ bool IsSplatCut(float3 pos)
         {
             if (all(abs(cutoutPos) <= 1)) return invert;
         }
-        finalCut |= !invert;
+        finalCut = finalCut || !invert;
     }
     return finalCut;
 }
 
 [numthreads(GROUP_SIZE,1,1)]
-void CSCalcViewData (uint3 id : SV_DispatchThreadID)
+void CSCalcViewData(uint3 id : SV_DispatchThreadID)
 {
     uint idx = id.x;
     if (idx >= _SplatCount)
@@ -260,7 +257,7 @@ uint2 GetSplatIndicesFromWord(uint idx)
 }
 
 [numthreads(GROUP_SIZE,1,1)]
-void CSUpdateEditData (uint3 id : SV_DispatchThreadID)
+void CSUpdateEditData(uint3 id : SV_DispatchThreadID)
 {
     uint idx = id.x;
     if (idx >= _BufferSize)
@@ -352,7 +349,7 @@ void CSInvertSelection (uint3 id : SV_DispatchThreadID)
 }
 
 [numthreads(GROUP_SIZE,1,1)]
-void CSSelectAll (uint3 id : SV_DispatchThreadID)
+void CSSelectAll(uint3 id : SV_DispatchThreadID)
 {
     uint idx = id.x;
     if (idx >= _BufferSize)
@@ -374,7 +371,7 @@ void CSSelectAll (uint3 id : SV_DispatchThreadID)
 
 
 [numthreads(GROUP_SIZE,1,1)]
-void CSOrBuffers (uint3 id : SV_DispatchThreadID)
+void CSOrBuffers(uint3 id : SV_DispatchThreadID)
 {
     uint idx = id.x;
     if (idx >= _BufferSize)
@@ -387,7 +384,7 @@ void CSOrBuffers (uint3 id : SV_DispatchThreadID)
 float4 _SelectionRect;
 
 [numthreads(GROUP_SIZE,1,1)]
-void CSSelectionUpdate (uint3 id : SV_DispatchThreadID)
+void CSSelectionUpdate(uint3 id : SV_DispatchThreadID)
 {
     uint idx = id.x;
     if (idx >= _SplatCount)
@@ -609,7 +606,7 @@ float3 _ExportTransformScale;
 uint _ExportTransformFlags;
 
 [numthreads(GROUP_SIZE,1,1)]
-void CSExportData (uint3 id : SV_DispatchThreadID)
+void CSExportData(uint3 id : SV_DispatchThreadID)
 {
     uint idx = id.x;
     if (idx >= _SplatCount)
@@ -679,7 +676,7 @@ float4 _CopyTransformRotation;
 float3 _CopyTransformScale;
 
 [numthreads(GROUP_SIZE,1,1)]
-void CSCopySplats (uint3 id : SV_DispatchThreadID)
+void CSCopySplats(uint3 id : SV_DispatchThreadID)
 {
     uint idx = id.x;
     if (idx >= _CopyCount)
