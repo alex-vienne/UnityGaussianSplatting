@@ -43,8 +43,6 @@ namespace GaussianSplatting.Runtime
 
         public void UnregisterSplat(GaussianSplatRenderer r)
         {
-            r.DisposeTempBuffers();
-
             if (!m_Splats.ContainsKey(r))
                 return;
             m_Splats.Remove(r);
@@ -110,8 +108,6 @@ namespace GaussianSplatting.Runtime
                 var gs = kvp.Item1;
                 matComposite = gs.m_MatComposite;
                 var mpb = kvp.Item2;
-
-                gs.DisposeTempBuffers();
 
                 // sort
                 var matrix = gs.transform.localToWorldMatrix;
@@ -255,6 +251,7 @@ namespace GaussianSplatting.Runtime
         GraphicsBuffer m_GpuSortDistances;
         internal GraphicsBuffer m_GpuSortKeys;
         GraphicsBuffer m_GpuPosData;
+        GraphicsBuffer m_GpuPosDataTemp;
         GraphicsBuffer m_GpuOtherData;
         GraphicsBuffer m_GpuSHData;
         Texture m_GpuColorData;
@@ -285,8 +282,6 @@ namespace GaussianSplatting.Runtime
         Hash128 m_PrevHash;
 
         static readonly ProfilerMarker s_ProfSort = new(ProfilerCategory.Render, "GaussianSplat.Sort", MarkerFlags.SampleGPU);
-
-        internal List<GraphicsBuffer> m_TempBuffers = new List<GraphicsBuffer>();
 
         internal static class Props
         {
@@ -372,17 +367,6 @@ namespace GaussianSplatting.Runtime
         public bool HasValidRenderSetup => m_GpuPosData != null && m_GpuOtherData != null && m_GpuChunks != null;
 
         const int kGpuViewDataSize = 40;
-
-        internal void DisposeTempBuffers()
-        {
-            foreach (var buffer in m_TempBuffers)
-            {
-                buffer.Dispose();
-            }
-            m_TempBuffers.Clear();
-
-            m_Sorter.DisposeTempBuffers();
-        }
 
         void CreateResourcesForAsset()
         {
@@ -488,11 +472,6 @@ namespace GaussianSplatting.Runtime
             m_MatDebugPoints = new Material(m_ShaderDebugPoints) {name = "GaussianDebugPoints"};
             m_MatDebugBoxes = new Material(m_ShaderDebugBoxes) {name = "GaussianDebugBoxes"};
 
-            if (m_Sorter != null)
-            {
-                m_Sorter.DisposeTempBuffers();
-            }
-
             if (GetSortMode() == SortMode.Radix)
                 m_Sorter = new GpuSortingRadix(m_CSSplatUtilitiesRadix);
             else
@@ -513,20 +492,22 @@ namespace GaussianSplatting.Runtime
             cmb.SetComputeTextureParam(cs, kernelIndex, Props.SplatColor, m_GpuColorData);
 
             // WebGPU does not allow the same buffer to be bound twice, for both read and write access
-            //var copyReadBuffers = SystemInfo.graphicsDeviceType == GraphicsDeviceType.WebGPU;
-            var copyReadBuffers = true;
+            var copyReadBuffers = SystemInfo.graphicsDeviceType == GraphicsDeviceType.WebGPU;
+            bool tempBufferCopied = false;
 
             if (copyReadBuffers && m_GpuEditSelected == null)
             {
-                var src = m_GpuPosData;
-                var dst = new GraphicsBuffer(
-                    src.target | GraphicsBuffer.Target.CopyDestination,
-                    src.count, src.stride);
-                dst.name = "SplatDeletedBits_READ";
-                m_TempBuffers.Add(dst);
-                cmb.CopyBuffer(m_GpuPosData, dst);
-
-                cmb.SetComputeBufferParam(cs, kernelIndex, Props.SplatSelectedBits, dst);;
+                if (m_GpuPosDataTemp == null || m_GpuPosDataTemp.count != m_GpuPosData.count)
+                {
+                    DisposeBuffer(ref m_GpuPosDataTemp);
+                    var src = m_GpuPosData;
+                    m_GpuPosDataTemp = new GraphicsBuffer(
+                        src.target | GraphicsBuffer.Target.CopyDestination,
+                        src.count, src.stride);
+                }
+                tempBufferCopied = true;
+                cmb.CopyBuffer(m_GpuPosData, m_GpuPosDataTemp);
+                cmb.SetComputeBufferParam(cs, kernelIndex, Props.SplatSelectedBits, m_GpuPosDataTemp);
             }
             else
             {
@@ -535,15 +516,20 @@ namespace GaussianSplatting.Runtime
 
             if (copyReadBuffers && m_GpuEditDeleted == null)
             {
-                var src = m_GpuPosData;
-                var dst = new GraphicsBuffer(
-                    src.target | GraphicsBuffer.Target.CopyDestination,
-                    src.count, src.stride);
-                dst.name = "SplatDeletedBits_READ";
-                m_TempBuffers.Add(dst);
-                cmb.CopyBuffer(m_GpuPosData, dst);
+                if (m_GpuPosDataTemp == null || m_GpuPosDataTemp.count != m_GpuPosData.count)
+                {
+                    DisposeBuffer(ref m_GpuPosDataTemp);
+                    var src = m_GpuPosData;
+                    m_GpuPosDataTemp = new GraphicsBuffer(
+                        src.target | GraphicsBuffer.Target.CopyDestination,
+                        src.count, src.stride);
+                }
+                if (!tempBufferCopied)
+                {
+                    cmb.CopyBuffer(m_GpuPosData, m_GpuPosDataTemp);
+                }
 
-                cmb.SetComputeBufferParam(cs, kernelIndex, Props.SplatDeletedBits, dst);
+                cmb.SetComputeBufferParam(cs, kernelIndex, Props.SplatDeletedBits, m_GpuPosDataTemp);
             }
             else
             {
@@ -589,6 +575,8 @@ namespace GaussianSplatting.Runtime
             DestroyImmediate(m_GpuColorData);
 
             DisposeBuffer(ref m_GpuPosData);
+            if (m_GpuPosDataTemp != null)
+              DisposeBuffer(ref m_GpuPosDataTemp);
             DisposeBuffer(ref m_GpuOtherData);
             DisposeBuffer(ref m_GpuSHData);
             DisposeBuffer(ref m_GpuChunks);

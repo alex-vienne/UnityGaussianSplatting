@@ -25,7 +25,9 @@ namespace GaussianSplatting.Runtime
             public GraphicsBuffer sortScratchBuffer;
             public GraphicsBuffer payloadScratchBuffer;
             public GraphicsBuffer scratchBuffer;
+            public GraphicsBuffer scratchBufferTemp;
             public GraphicsBuffer reducedScratchBuffer;
+            public GraphicsBuffer reducedScratchBufferTemp;
 
             public static SupportResourcesFFX Load(uint count)
             {
@@ -52,12 +54,16 @@ namespace GaussianSplatting.Runtime
                 sortScratchBuffer?.Dispose();
                 payloadScratchBuffer?.Dispose();
                 scratchBuffer?.Dispose();
+                scratchBufferTemp?.Dispose();
                 reducedScratchBuffer?.Dispose();
+                reducedScratchBufferTemp?.Dispose();
 
                 sortScratchBuffer = null;
                 payloadScratchBuffer = null;
                 scratchBuffer = null;
+                scratchBufferTemp = null;
                 reducedScratchBuffer = null;
+                reducedScratchBufferTemp = null;
             }
         }
 
@@ -114,17 +120,6 @@ namespace GaussianSplatting.Runtime
             public uint padding;                              // Padding - unused
         }
 
-        List<GraphicsBuffer> m_TempBuffers = new List<GraphicsBuffer>();
-
-        public override void DisposeTempBuffers()
-        {
-            foreach (var buffer in m_TempBuffers)
-            {
-                buffer.Dispose();
-            }
-            m_TempBuffers.Clear();
-        }
-
         public override void Dispatch(CommandBuffer cmd, Args args)
         {
             Assert.IsTrue(Valid);
@@ -170,29 +165,39 @@ namespace GaussianSplatting.Runtime
             cmd.SetComputeIntParam(m_CS, "numScanValues", (int)constants.numScanValues);
 
             // WebGPU does not allow the same buffer to be bound twice, for both read and write access
-            //var copyReadBuffers = SystemInfo.graphicsDeviceType == GraphicsDeviceType.WebGPU;
-            var copyReadBuffers = true;
+            var copyReadBuffers = SystemInfo.graphicsDeviceType == GraphicsDeviceType.WebGPU;
 
             var reducedScratchBufferRead = resources.reducedScratchBuffer;
             if (copyReadBuffers)
             {
-                var src = resources.reducedScratchBuffer;
-                reducedScratchBufferRead = new GraphicsBuffer(
-                    GraphicsBuffer.Target.Structured | GraphicsBuffer.Target.CopyDestination,
-                    src.count, src.stride);
-                reducedScratchBufferRead.name = "reducedScratchBuffer_READ";
-                m_TempBuffers.Add(reducedScratchBufferRead);
+                if (resources.reducedScratchBufferTemp == null || resources.reducedScratchBufferTemp.count != resources.reducedScratchBuffer.count)
+                {
+                    resources.reducedScratchBufferTemp?.Dispose();
+                    var src = resources.reducedScratchBuffer;
+                    reducedScratchBufferRead = new GraphicsBuffer(
+                        GraphicsBuffer.Target.Structured | GraphicsBuffer.Target.CopyDestination,
+                        src.count, src.stride);
+                    reducedScratchBufferRead.name = "reducedScratchBuffer_READ";
+                    resources.reducedScratchBufferTemp = reducedScratchBufferRead;
+                }
+                reducedScratchBufferRead = resources.reducedScratchBufferTemp;
             }
 
             var scratchBufferRead = resources.scratchBuffer;
             if (copyReadBuffers)
             {
-                var src = resources.scratchBuffer;
-                scratchBufferRead = new GraphicsBuffer(
-                    GraphicsBuffer.Target.Structured | GraphicsBuffer.Target.CopyDestination,
-                    src.count, src.stride);
-                scratchBufferRead.name = "scratchBuffer_READ";
-                m_TempBuffers.Add(scratchBufferRead);
+                if (resources.scratchBufferTemp == null || resources.scratchBufferTemp.count != resources.scratchBufferTemp.count)
+                {
+                    resources.scratchBufferTemp?.Dispose();
+                    var src = resources.scratchBuffer;
+                    scratchBufferRead = new GraphicsBuffer(
+                        GraphicsBuffer.Target.Structured | GraphicsBuffer.Target.CopyDestination,
+                        src.count, src.stride);
+                    scratchBufferRead.name = "scratchBuffer_READ";
+
+                    resources.scratchBufferTemp = scratchBufferRead;
+                }
+                scratchBufferRead = resources.scratchBufferTemp;
             }
 
             // Execute the sort algorithm in 4-bit increments
@@ -212,28 +217,24 @@ namespace GaussianSplatting.Runtime
                 cmd.DispatchCompute(m_CS, m_KernelReduce, (int)numReducedThreadGroupsToRun, 1, 1);
 
                 // Scan
+                if (copyReadBuffers)
                 {
-                    if (copyReadBuffers)
-                    {
-                        cmd.CopyBuffer(resources.reducedScratchBuffer, reducedScratchBufferRead);
-                    }
-                    cmd.SetComputeBufferParam(m_CS, m_KernelScan, "rw_scan_source", reducedScratchBufferRead);
-                    cmd.SetComputeBufferParam(m_CS, m_KernelScan, "rw_scan_dest", resources.reducedScratchBuffer);
-                    cmd.DispatchCompute(m_CS, m_KernelScan, 1, 1, 1);
+                    cmd.CopyBuffer(resources.reducedScratchBuffer, reducedScratchBufferRead);
                 }
+                cmd.SetComputeBufferParam(m_CS, m_KernelScan, "rw_scan_source", reducedScratchBufferRead);
+                cmd.SetComputeBufferParam(m_CS, m_KernelScan, "rw_scan_dest", resources.reducedScratchBuffer);
+                cmd.DispatchCompute(m_CS, m_KernelScan, 1, 1, 1);
 
                 // Scan add
+              if (copyReadBuffers)
                 {
-                  if (copyReadBuffers)
-                    {
-                        cmd.CopyBuffer(resources.scratchBuffer, scratchBufferRead);
-                    }
-
-                    cmd.SetComputeBufferParam(m_CS, m_KernelScanAdd, "rw_scan_source", scratchBufferRead);
-                    cmd.SetComputeBufferParam(m_CS, m_KernelScanAdd, "rw_scan_dest", resources.scratchBuffer);
-                    cmd.SetComputeBufferParam(m_CS, m_KernelScanAdd, "rw_scan_scratch", resources.reducedScratchBuffer);
-                    cmd.DispatchCompute(m_CS, m_KernelScanAdd, (int)numReducedThreadGroupsToRun, 1, 1);
+                    cmd.CopyBuffer(resources.scratchBuffer, scratchBufferRead);
                 }
+
+                cmd.SetComputeBufferParam(m_CS, m_KernelScanAdd, "rw_scan_source", scratchBufferRead);
+                cmd.SetComputeBufferParam(m_CS, m_KernelScanAdd, "rw_scan_dest", resources.scratchBuffer);
+                cmd.SetComputeBufferParam(m_CS, m_KernelScanAdd, "rw_scan_scratch", resources.reducedScratchBuffer);
+                cmd.DispatchCompute(m_CS, m_KernelScanAdd, (int)numReducedThreadGroupsToRun, 1, 1);
 
                 // Scatter
                 cmd.SetComputeBufferParam(m_CS, m_KernelScatter, "rw_source_keys", srcKeyBuffer);
