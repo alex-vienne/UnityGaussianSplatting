@@ -210,7 +210,6 @@ namespace GaussianSplatting.Runtime
     {
         public enum SortMode
         {
-            Default,
             Radix,
             FFX
         }
@@ -237,7 +236,7 @@ namespace GaussianSplatting.Runtime
         [Range(1,30)] [Tooltip("Sort splats only every N frames")]
         public int m_SortNthFrame = 1;
 
-        public SortMode m_SortMode = SortMode.Default;
+        public SortMode m_SortMode = SortMode.Radix;
 
         public RenderMode m_RenderMode = RenderMode.Splats;
         [Range(1.0f,15.0f)] public float m_PointDisplaySize = 3.0f;
@@ -437,7 +436,7 @@ namespace GaussianSplatting.Runtime
 
         bool IsRadixSupported => (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D12 || SystemInfo.graphicsDeviceType == GraphicsDeviceType.Vulkan);
 
-        internal SortMode GetSortMode() => !IsRadixSupported ? SortMode.FFX : m_SortMode == SortMode.Default ? SortMode.Radix : m_SortMode;
+        internal SortMode GetSortMode() => !IsRadixSupported ? SortMode.FFX : m_SortMode;
 
         ComputeShader m_CSSplatUtilities => GetSortMode() == SortMode.Radix ? m_CSSplatUtilitiesRadix : m_CSSplatUtilitiesFFX;
 
@@ -470,7 +469,7 @@ namespace GaussianSplatting.Runtime
 
         public void Reset(int value)
         {
-            m_SortMode = value == 0 ? SortMode.Default : value == 1 ? SortMode.Radix : SortMode.FFX;
+            m_SortMode = value == 0 ? SortMode.Radix : SortMode.FFX;
             OnDisable();
             OnEnable();
         }
