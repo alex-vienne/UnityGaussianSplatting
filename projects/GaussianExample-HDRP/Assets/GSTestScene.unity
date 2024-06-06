@@ -668,7 +668,8 @@ MonoBehaviour:
   m_ShaderComposite: {fileID: 4800000, guid: 7e184af7d01193a408eb916d8acafff9, type: 3}
   m_ShaderDebugPoints: {fileID: 4800000, guid: b44409fc67214394f8f47e4e2648425e, type: 3}
   m_ShaderDebugBoxes: {fileID: 4800000, guid: 4006f2680fd7c8b4cbcb881454c782be, type: 3}
-  m_CSSplatUtilities: {fileID: 7200000, guid: ec84f78b836bd4f96a105d6b804f08bd, type: 3}
+  m_CSSplatUtilitiesRadix: {fileID: 7200000, guid: e382bbf4bd2a20049bfe578e3818a985, type: 3}
+  m_CSSplatUtilitiesFFX: {fileID: 7200000, guid: ec84f78b836bd4f96a105d6b804f08bd, type: 3}
 --- !u!4 &1609192435
 Transform:
   m_ObjectHideFlags: 0
