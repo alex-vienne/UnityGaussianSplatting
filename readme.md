@@ -1,8 +1,10 @@
-#some more features added to Gaussian Splatting 
-Splat Saturation
-Splat Over Color
-Splat Black and White
-Splat Outline
+
+# some more features added to Gaussian Splatting 
+
+Splat Saturation</br>
+Splat Over Color</br>
+Splat Black and White</br>
+Splat Outline</br>
 
 # Gaussian Splatting playground in Unity
 
