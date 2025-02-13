@@ -314,6 +314,10 @@ SplatBufferDataType _SplatPos;
 SplatBufferDataType _SplatOther;
 SplatBufferDataType _SplatSH;
 Texture2D _SplatColor;
+half4 _SplatOverColor;
+float _SplatSaturation = 1;
+int _SplatIsBlackAndWhite = 0;
+int _SplatIsOutlined = 0;
 uint _SplatFormat;
 
 // Match GaussianSplatAsset.VectorFormat

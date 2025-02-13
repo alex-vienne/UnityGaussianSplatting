@@ -23,6 +23,10 @@ namespace GaussianSplatting.Editor
         SerializedProperty m_PropAsset;
         SerializedProperty m_PropSplatScale;
         SerializedProperty m_PropOpacityScale;
+        SerializedProperty m_PropOverColor;
+        SerializedProperty m_PropSaturation;
+        SerializedProperty m_PropIsBlackAndWhite;
+        SerializedProperty m_PropIsOutlined;
         SerializedProperty m_PropSHOrder;
         SerializedProperty m_PropSHOnly;
         SerializedProperty m_PropSortNthFrame;
@@ -64,6 +68,10 @@ namespace GaussianSplatting.Editor
             m_PropAsset = serializedObject.FindProperty("m_Asset");
             m_PropSplatScale = serializedObject.FindProperty("m_SplatScale");
             m_PropOpacityScale = serializedObject.FindProperty("m_OpacityScale");
+            m_PropOverColor = serializedObject.FindProperty("m_OverColor");
+            m_PropSaturation = serializedObject.FindProperty("m_Saturation");
+            m_PropIsBlackAndWhite = serializedObject.FindProperty("m_IsBlackAndWhite");
+            m_PropIsOutlined = serializedObject.FindProperty("m_IsOutlined");
             m_PropSHOrder = serializedObject.FindProperty("m_SHOrder");
             m_PropSHOnly = serializedObject.FindProperty("m_SHOnly");
             m_PropSortNthFrame = serializedObject.FindProperty("m_SortNthFrame");
@@ -109,6 +117,10 @@ namespace GaussianSplatting.Editor
             GUILayout.Label("Render Options", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(m_PropSplatScale);
             EditorGUILayout.PropertyField(m_PropOpacityScale);
+            EditorGUILayout.PropertyField(m_PropOverColor);
+            EditorGUILayout.PropertyField(m_PropSaturation);
+            EditorGUILayout.PropertyField(m_PropIsBlackAndWhite);
+            EditorGUILayout.PropertyField(m_PropIsOutlined);
             EditorGUILayout.PropertyField(m_PropSHOrder);
             EditorGUILayout.PropertyField(m_PropSHOnly);
             EditorGUILayout.PropertyField(m_PropSortNthFrame);

@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 33b71fae31e6c7d438e8566dc713e666, type: 3}
+  m_Name: gs_primevere_long-edit
+  m_EditorClassIdentifier: 
+  m_FormatVersion: 20231020
+  m_SplatCount: 574981
+  m_BoundsMin: {x: -2.0142717, y: -0.43430173, z: -2.4202042}
+  m_BoundsMax: {x: 1.7262014, y: 1.1515299, z: 1.2689}
+  m_DataHash:
+    serializedVersion: 2
+    Hash: 47e1df3d82457a1d9b45e8b7ab0d9ebf
+  m_PosFormat: 1
+  m_ScaleFormat: 1
+  m_SHFormat: 2
+  m_ColorFormat: 1
+  m_PosData: {fileID: 4900000, guid: f6a3e4f85dea67b41852fe0cc457530b, type: 3}
+  m_ColorData: {fileID: 4900000, guid: 29fb354df03a4f34a855f1ec0bb7ddc7, type: 3}
+  m_OtherData: {fileID: 4900000, guid: f612d1ec7dd165b4ea6cd23780f4552a, type: 3}
+  m_SHData: {fileID: 4900000, guid: 25ad052c7508b12469ffc2bab5469a2a, type: 3}
+  m_ChunkData: {fileID: 4900000, guid: 33d89f2555cd0d940bc92cf47758a8a3, type: 3}
+  m_Cameras: []

@@ -136,6 +136,10 @@ namespace GaussianSplatting.Runtime
                 mpb.SetBuffer(GaussianSplatRenderer.Props.OrderBuffer, gs.m_GpuSortKeys);
                 mpb.SetFloat(GaussianSplatRenderer.Props.SplatScale, gs.m_SplatScale);
                 mpb.SetFloat(GaussianSplatRenderer.Props.SplatOpacityScale, gs.m_OpacityScale);
+                mpb.SetColor(GaussianSplatRenderer.Props.SplatOverColor, gs.m_OverColor);
+                mpb.SetFloat(GaussianSplatRenderer.Props.SplatSaturation, gs.m_Saturation);
+                mpb.SetInt(GaussianSplatRenderer.Props.SplatIsBlackAndWhite, gs.m_IsBlackAndWhite ? 1 : 0);
+                mpb.SetInt(GaussianSplatRenderer.Props.SplatIsOutlined, gs.m_IsOutlined ? 1 : 0);
                 mpb.SetFloat(GaussianSplatRenderer.Props.SplatSize, gs.m_PointDisplaySize);
                 mpb.SetInteger(GaussianSplatRenderer.Props.SHOrder, gs.m_SHOrder);
                 mpb.SetInteger(GaussianSplatRenderer.Props.SHOnly, gs.m_SHOnly ? 1 : 0);
@@ -218,6 +222,9 @@ namespace GaussianSplatting.Runtime
             DebugBoxes,
             DebugChunkBounds,
         }
+
+        public bool m_IsInitialized = false;
+
         public GaussianSplatAsset m_Asset;
 
         [Range(0.1f, 2.0f)] [Tooltip("Additional scaling factor for the splats")]
@@ -225,6 +232,20 @@ namespace GaussianSplatting.Runtime
         [Range(0.05f, 20.0f)]
         [Tooltip("Additional scaling factor for opacity")]
         public float m_OpacityScale = 1.0f;
+
+        [Tooltip("Additional color factor for the splats")]
+        public Color m_OverColor;
+
+        [Range(0.0f, 10.0f)]
+        [Tooltip("Set saturation")]
+        public float m_Saturation = 1.0f;
+
+        [Tooltip("Set black and white")]
+        public bool m_IsBlackAndWhite = false;
+
+        [Tooltip("Set black and white")]
+        public bool m_IsOutlined = false;
+
         [Range(0, 3)] [Tooltip("Spherical Harmonics order to use")]
         public int m_SHOrder = 3;
         [Tooltip("Show only Spherical Harmonics contribution, using gray color")]
@@ -299,6 +320,10 @@ namespace GaussianSplatting.Runtime
             public static readonly int OrderBuffer = Shader.PropertyToID("_OrderBuffer");
             public static readonly int SplatScale = Shader.PropertyToID("_SplatScale");
             public static readonly int SplatOpacityScale = Shader.PropertyToID("_SplatOpacityScale");
+            public static readonly int SplatOverColor = Shader.PropertyToID("_SplatOverColor");
+            public static readonly int SplatSaturation = Shader.PropertyToID("_SplatSaturation");
+            public static readonly int SplatIsBlackAndWhite = Shader.PropertyToID("_SplatIsBlackAndWhite");
+            public static readonly int SplatIsOutlined = Shader.PropertyToID("_SplatIsOutlined");
             public static readonly int SplatSize = Shader.PropertyToID("_SplatSize");
             public static readonly int SplatCount = Shader.PropertyToID("_SplatCount");
             public static readonly int SHOrder = Shader.PropertyToID("_SHOrder");
@@ -460,6 +485,11 @@ namespace GaussianSplatting.Runtime
 
         public void OnEnable()
         {
+            InitializeGS();
+        }
+
+        private void InitializeGS()
+        {
             m_FrameCounter = 0;
             if (m_ShaderSplats == null || m_ShaderComposite == null || m_ShaderDebugPoints == null || m_ShaderDebugBoxes == null || m_CSSplatUtilities == null)
                 return;
@@ -467,10 +497,10 @@ namespace GaussianSplatting.Runtime
             if (!SystemInfo.supportsComputeShaders)
                 return;
 
-            m_MatSplats = new Material(m_ShaderSplats) {name = "GaussianSplats"};
-            m_MatComposite = new Material(m_ShaderComposite) {name = "GaussianClearDstAlpha"};
-            m_MatDebugPoints = new Material(m_ShaderDebugPoints) {name = "GaussianDebugPoints"};
-            m_MatDebugBoxes = new Material(m_ShaderDebugBoxes) {name = "GaussianDebugBoxes"};
+            m_MatSplats = new Material(m_ShaderSplats) { name = "GaussianSplats" };
+            m_MatComposite = new Material(m_ShaderComposite) { name = "GaussianClearDstAlpha" };
+            m_MatDebugPoints = new Material(m_ShaderDebugPoints) { name = "GaussianDebugPoints" };
+            m_MatDebugBoxes = new Material(m_ShaderDebugBoxes) { name = "GaussianDebugBoxes" };
 
             if (GetSortMode() == SortMode.Radix)
                 m_Sorter = new GpuSortingRadix(m_CSSplatUtilitiesRadix);
@@ -608,6 +638,11 @@ namespace GaussianSplatting.Runtime
 
         public void OnDisable()
         {
+            UnInitializeGS();
+        }
+
+        private void UnInitializeGS()
+        {
             DisposeResourcesForAsset();
             GaussianSplatRenderSystem.instance.UnregisterSplat(this);
 
@@ -645,6 +680,9 @@ namespace GaussianSplatting.Runtime
             cmb.SetComputeVectorParam(m_CSSplatUtilities, Props.VecWorldSpaceCameraPos, camPos);
             cmb.SetComputeFloatParam(m_CSSplatUtilities, Props.SplatScale, m_SplatScale);
             cmb.SetComputeFloatParam(m_CSSplatUtilities, Props.SplatOpacityScale, m_OpacityScale);
+            cmb.SetGlobalColor(Props.SplatOverColor, m_OverColor);
+            cmb.SetComputeIntParam(m_CSSplatUtilities,Props.SplatIsBlackAndWhite, m_IsBlackAndWhite? 1:0);
+            cmb.SetComputeIntParam(m_CSSplatUtilities, Props.SplatIsOutlined, m_IsOutlined ? 1 : 0);
             cmb.SetComputeIntParam(m_CSSplatUtilities, Props.SHOrder, m_SHOrder);
             cmb.SetComputeIntParam(m_CSSplatUtilities, Props.SHOnly, m_SHOnly ? 1 : 0);
 

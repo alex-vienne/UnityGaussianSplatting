@@ -24,3 +24,5 @@
 /projects/**/Temp/*
 /projects/**/UserSettings/*
 /projects/**/obj/*
+/projects/**/Build/*
+/projects/**/.vs/*
