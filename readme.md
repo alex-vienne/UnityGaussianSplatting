@@ -1,5 +1,5 @@
 
-# some more features added to Gaussian Splatting 
+# Gaussian Splatting : Some more features added
 
 Splat Saturation</br>
 Splat Over Color</br>
