@@ -6,6 +6,8 @@ Splat Over Color</br>
 Splat Black and White</br>
 Splat Outline</br>
 
+![Screenshot](/docs/Images/primevers.png?raw=true "Screenshot")
+
 Demo is here:  https://alex-vienne.github.io/UnityGaussianSplatting/
 
 # Gaussian Splatting playground in Unity
