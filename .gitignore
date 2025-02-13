@@ -24,5 +24,7 @@
 /projects/**/Temp/*
 /projects/**/UserSettings/*
 /projects/**/obj/*
-/projects/**/Build/*
+/projects/GaussianExample-URP/Build/*
+
+
 /projects/**/.vs/*
