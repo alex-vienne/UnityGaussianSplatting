@@ -139,6 +139,7 @@ namespace GaussianSplatting.Runtime
                 mpb.SetColor(GaussianSplatRenderer.Props.SplatOverColor, gs.m_OverColor);
                 mpb.SetFloat(GaussianSplatRenderer.Props.SplatSaturation, gs.m_Saturation);
                 mpb.SetInt(GaussianSplatRenderer.Props.SplatIsBlackAndWhite, gs.m_IsBlackAndWhite ? 1 : 0);
+                mpb.SetInt(GaussianSplatRenderer.Props.SplatIslightened, gs.m_Islightened ? 1 : 0);                
                 mpb.SetInt(GaussianSplatRenderer.Props.SplatIsOutlined, gs.m_IsOutlined ? 1 : 0);
                 mpb.SetFloat(GaussianSplatRenderer.Props.SplatSize, gs.m_PointDisplaySize);
                 mpb.SetInteger(GaussianSplatRenderer.Props.SHOrder, gs.m_SHOrder);
@@ -243,6 +244,9 @@ namespace GaussianSplatting.Runtime
         [Tooltip("Set black and white")]
         public bool m_IsBlackAndWhite = false;
 
+        [Tooltip("Set scene light")]
+        public bool m_Islightened = false;        
+
         [Tooltip("Set black and white")]
         public bool m_IsOutlined = false;
 
@@ -323,6 +327,7 @@ namespace GaussianSplatting.Runtime
             public static readonly int SplatOverColor = Shader.PropertyToID("_SplatOverColor");
             public static readonly int SplatSaturation = Shader.PropertyToID("_SplatSaturation");
             public static readonly int SplatIsBlackAndWhite = Shader.PropertyToID("_SplatIsBlackAndWhite");
+            public static readonly int SplatIslightened = Shader.PropertyToID("_SplatIslightened");
             public static readonly int SplatIsOutlined = Shader.PropertyToID("_SplatIsOutlined");
             public static readonly int SplatSize = Shader.PropertyToID("_SplatSize");
             public static readonly int SplatCount = Shader.PropertyToID("_SplatCount");
@@ -682,6 +687,7 @@ namespace GaussianSplatting.Runtime
             cmb.SetComputeFloatParam(m_CSSplatUtilities, Props.SplatOpacityScale, m_OpacityScale);
             cmb.SetGlobalColor(Props.SplatOverColor, m_OverColor);
             cmb.SetComputeIntParam(m_CSSplatUtilities,Props.SplatIsBlackAndWhite, m_IsBlackAndWhite? 1:0);
+            cmb.SetComputeIntParam(m_CSSplatUtilities, Props.SplatIslightened, m_Islightened ? 1 : 0);
             cmb.SetComputeIntParam(m_CSSplatUtilities, Props.SplatIsOutlined, m_IsOutlined ? 1 : 0);
             cmb.SetComputeIntParam(m_CSSplatUtilities, Props.SHOrder, m_SHOrder);
             cmb.SetComputeIntParam(m_CSSplatUtilities, Props.SHOnly, m_SHOnly ? 1 : 0);

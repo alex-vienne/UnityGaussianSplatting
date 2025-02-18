@@ -68,6 +68,17 @@ v2f vert (uint vtxID : SV_VertexID, uint instID : SV_InstanceID)
 		o.vertex = centerClipPos;
 		o.vertex.xy += deltaScreenPos * centerClipPos.w;
 
+		if(_SplatIslightened == 1)
+		{
+
+			half3 worldNormal = o.vertex;//UnityObjectToWorldNormal(o.vertex);
+			// dot product between normal and light direction for
+			// standard diffuse (Lambert) lighting
+			half nl = max(0, dot(worldNormal, _WorldSpaceLightPos0.xyz));
+			// factor in the light color
+			o.col.rgb = o.col.rgb + nl * _LightColor0;
+		}
+
 		// is this splat selected?
 		if (_SplatBitsValid)
 		{
@@ -96,7 +107,7 @@ half4 frag (v2f i) : SV_Target
 	//i.col = i.col * _LightColor0;
 
 	//half4 overCol = half4(100,0.5,10.0,2);
-
+	
 	// over color
 	i.col = i.col * _SplatOverColor;
 

@@ -68,6 +68,11 @@ public class GaussianSplatUI : MonoBehaviour
         gsRenderer.m_IsBlackAndWhite = toggle.isOn;
     }
 
+    public void SetGSLightened(UnityEngine.UI.Toggle toggle)
+    {
+        gsRenderer.m_Islightened = toggle.isOn;
+    }
+
     public void SetGSOutline(UnityEngine.UI.Toggle toggle)
     {
         gsRenderer.m_IsOutlined = toggle.isOn;
