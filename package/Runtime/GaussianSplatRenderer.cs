@@ -271,7 +271,7 @@ namespace GaussianSplatting.Runtime
         int m_SplatCount; // initially same as asset splat count, but editing can change this
         GraphicsBuffer m_GpuSortDistances;
         internal GraphicsBuffer m_GpuSortKeys;
-        GraphicsBuffer m_GpuPosData;
+        public GraphicsBuffer m_GpuPosData;
         GraphicsBuffer m_GpuPosDataTemp;
         GraphicsBuffer m_GpuOtherData;
         GraphicsBuffer m_GpuSHData;
@@ -769,7 +769,7 @@ namespace GaussianSplatting.Runtime
             m_CSSplatUtilities.Dispatch((int)KernelIndices.OrBuffers, (int)((dst.count+gsX-1)/gsX), 1, 1);
         }
 
-        static float SortableUintToFloat(uint v)
+        public static float SortableUintToFloat(uint v)
         {
             uint mask = ((v >> 31) - 1) | 0x80000000u;
             return math.asfloat(v ^ mask);
