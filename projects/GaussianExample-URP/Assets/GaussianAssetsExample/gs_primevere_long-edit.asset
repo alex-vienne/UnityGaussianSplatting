@@ -18,14 +18,14 @@ MonoBehaviour:
   m_BoundsMax: {x: 1.7262014, y: 1.1515299, z: 1.2689}
   m_DataHash:
     serializedVersion: 2
-    Hash: 47e1df3d82457a1d9b45e8b7ab0d9ebf
-  m_PosFormat: 1
+    Hash: d2c1fff17b2d6e95ac3d1b67323315db
+  m_PosFormat: 0
   m_ScaleFormat: 1
   m_SHFormat: 2
   m_ColorFormat: 1
-  m_PosData: {fileID: 4900000, guid: f6a3e4f85dea67b41852fe0cc457530b, type: 3}
-  m_ColorData: {fileID: 4900000, guid: 29fb354df03a4f34a855f1ec0bb7ddc7, type: 3}
-  m_OtherData: {fileID: 4900000, guid: f612d1ec7dd165b4ea6cd23780f4552a, type: 3}
-  m_SHData: {fileID: 4900000, guid: 25ad052c7508b12469ffc2bab5469a2a, type: 3}
-  m_ChunkData: {fileID: 4900000, guid: 33d89f2555cd0d940bc92cf47758a8a3, type: 3}
+  m_PosData: {fileID: 4900000, guid: 4464b7280ec360c4792552fde7937fc9, type: 3}
+  m_ColorData: {fileID: 4900000, guid: e1a1a9c8f5c89684686a18420853d906, type: 3}
+  m_OtherData: {fileID: 4900000, guid: 854eab9d65d19c14e9d89337a7d2ea68, type: 3}
+  m_SHData: {fileID: 4900000, guid: 58ca87bd7927dd049856afee83714ecf, type: 3}
+  m_ChunkData: {fileID: 4900000, guid: f1d150f15c8b00a4d9a415c74cf3254c, type: 3}
   m_Cameras: []
