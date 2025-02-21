@@ -36,7 +36,7 @@ public class GaussianSplatUI : MonoBehaviour
         openPanelGO.SetActive(false);
 
         // Norm16
-        if (gsRenderer.m_Asset.posFormat == GaussianSplatAsset.VectorFormat.Norm16)
+        if (gsRenderer.HasValidAsset && gsRenderer.m_Asset.posFormat == GaussianSplatAsset.VectorFormat.Norm16)
         {
             posFloatArray = new float3[gsRenderer.m_Asset.splatCount];
             posDataBytes = gsRenderer.m_Asset.posData.bytes;
@@ -60,7 +60,7 @@ public class GaussianSplatUI : MonoBehaviour
             m_OutputNorm16 = new NativeArray<byte>(gsRenderer.m_Asset.splatCount * 6 + 2, Allocator.Persistent);
         }
         // Float32
-        else if (gsRenderer.m_Asset.posFormat == GaussianSplatAsset.VectorFormat.Float32)
+        else if (gsRenderer.HasValidAsset && gsRenderer.m_Asset.posFormat == GaussianSplatAsset.VectorFormat.Float32)
         {
             posFloatArray = new float3[gsRenderer.m_Asset.splatCount];
             for (int i = 0; i < gsRenderer.m_Asset.splatCount * 3; i += 3)

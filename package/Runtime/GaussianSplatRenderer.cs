@@ -406,9 +406,12 @@ namespace GaussianSplatting.Runtime
             GraphicsFormat texFormat;
             if (!HasValidAsset)
             {
-                //NativeArray<InputSplatData> splats = GetDataFromPLY();
+                // todo
+                //NativeArray<GaussianSplatAssetRuntimeCreator.InputSplatData> splats = GetDataFromPLY();
                 //GetSplatPositionsFromInputSplatData(splats);
 
+                //widthHeight = GaussianSplatAsset.CalcTextureSize(splatCount).ToTuple();
+                //texFormat = GaussianSplatAsset.ColorFormatToGraphics(GaussianSplatAsset.ColorFormat.Float16x4);
                 return;
             }
             else
@@ -1213,6 +1216,53 @@ namespace GaussianSplatting.Runtime
                 var array = m_OutputFloat32.Reinterpret<uint>(1);
                 m_GpuPosData.SetData(array);
             }
+
+            //other
+            /*
+            // todo
+            var m_FormatScale = GaussianSplatAsset.VectorFormat.Norm16;
+            int formatSize = GaussianSplatAsset.GetOtherSizeNoSHIndex(m_FormatScale);
+
+            DisposeBuffer(ref m_GpuOtherData);
+            //m_GpuOtherData = new GraphicsBuffer(GraphicsBuffer.Target.Raw | GraphicsBuffer.Target.CopySource, (int)(asset.otherData.dataSize / 4), 4) { name = "GaussianOtherData" };
+            unsafe
+            {
+                NativeArray<byte> m_OutputFloat32 = new NativeArray<byte>(splatCount * 12, Allocator.Temp);
+                for (int i = 0; i < splatCount; i++)
+                {
+                    byte* outputPtr = (byte*)m_OutputFloat32.GetUnsafePtr() + i * m_FormatSize;
+
+                    // rotation: 4 bytes
+                    {
+                        Quaternion rotQ = splats[i].rot;
+                        float4 rot = new float4(rotQ.x, rotQ.y, rotQ.z, rotQ.w);
+                        uint enc = EncodeQuatToNorm10(rot);
+                        *(uint*)outputPtr = enc;
+                        outputPtr += 4;
+                    }
+
+                    // scale: 6, 4 or 2 bytes
+                    EmitEncodedVector(splats[i].scale, outputPtr, m_ScaleFormat);
+                    outputPtr += GaussianSplatAsset.GetVectorSize(m_ScaleFormat);
+
+                    // SH index
+                    if (m_SplatSHIndices.IsCreated)
+                        *(ushort*)outputPtr = (ushort)m_SplatSHIndices[i];
+                }
+
+            }
+            */
+            //var other = splats.Select(x => x.).ToArray();
+
+
+            //m_GpuOtherData.SetData(asset.otherData.GetData<uint>());
+            //if (splatSHIndices.IsCreated)
+            //    formatSize += 2;
+            //int dataLen = inputSplats.Length * formatSize;
+
+            //dataLen = NextMultipleOf(dataLen, 8); // serialized as ulong
+            //NativeArray<byte> data = new(dataLen, Allocator.TempJob);
+
         }
 
         private NativeArray<GaussianSplatAssetRuntimeCreator.InputSplatData> GetDataFromPLY()
@@ -1221,29 +1271,31 @@ namespace GaussianSplatting.Runtime
             inputSplats = GaussianSplatAssetRuntimeCreator.LoadPLYSplatFile("./Assets/GaussianAssets/gs_primevere_long-edit.ply");
             m_SplatCount = inputSplats.Length;
 
-            //unsafe
-            //{
-                //float3 boundsMin, boundsMax;
-                //var boundsJob = new GaussianSplatAssetRuntimeCreator.CalcBoundsJob
-                //{
-                //    m_BoundsMin = &boundsMin,
-                //    m_BoundsMax = &boundsMax,
-                //    m_SplatData = inputSplats
-                //};
+            unsafe
+            {
+                float3 boundsMin, boundsMax;
+                var boundsJob = new GaussianSplatAssetRuntimeCreator.CalcBoundsJob
+                {
+                    m_BoundsMin = &boundsMin,
+                    m_BoundsMax = &boundsMax,
+                    m_SplatData = inputSplats
+                };
 
-                //boundsJob.Schedule().Complete();
-                //GaussianSplatAssetRuntimeCreator.ReorderMorton(inputSplats, boundsMin, boundsMax);
+                boundsJob.Schedule().Complete();
+                GaussianSplatAssetRuntimeCreator.ReorderMorton(inputSplats, boundsMin, boundsMax);
+            }
 
+            // cluster SHs
+            NativeArray<int> splatSHIndices = default;
+            NativeArray<GaussianSplatAsset.SHTableItemFloat16> clusteredSHs = default;
 
-                // cluster SHs
-                //NativeArray<int> splatSHIndices = default;
-                //NativeArray<GaussianSplatAsset.SHTableItemFloat16> clusteredSHs = default;
-                //if (m_FormatSH >= GaussianSplatAsset.SHFormat.Cluster64k)
-                //{
-                //    EditorUtility.DisplayProgressBar(kProgressTitle, "Cluster SHs", 0.2f);
-                //    ClusterSHs(inputSplats, m_FormatSH, out clusteredSHs, out splatSHIndices);
-                //}
-            //}            
+            //Todo
+            var m_FormatSH = GaussianSplatAsset.SHFormat.Norm11;
+            if (m_FormatSH >= GaussianSplatAsset.SHFormat.Cluster64k)
+            {
+                GaussianSplatAssetRuntimeCreator.ClusterSHs(inputSplats, m_FormatSH, out clusteredSHs, out splatSHIndices);
+            }
+
 
             return inputSplats;
         }

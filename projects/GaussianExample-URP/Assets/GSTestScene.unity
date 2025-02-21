@@ -4945,7 +4945,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_IsInitialized: 0
-  m_Asset: {fileID: 11400000, guid: efabf6e95858ec34ba4d17a968912ff5, type: 2}
+  m_Asset: {fileID: 11400000, guid: 5e931ec1506e9b540ac7bd18e2483b32, type: 2}
   m_SplatScale: 1
   m_OpacityScale: 1
   m_OverColor: {r: 1, g: 1, b: 1, a: 1}
