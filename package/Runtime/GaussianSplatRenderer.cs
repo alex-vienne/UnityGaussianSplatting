@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
-
+using GaussianSplatting.RuntimeCreator;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
+using Unity.Jobs;
 using Unity.Mathematics;
 using Unity.Profiling;
 using Unity.Profiling.LowLevel;
@@ -400,39 +402,63 @@ namespace GaussianSplatting.Runtime
 
         void CreateResourcesForAsset()
         {
+            Tuple<int, int> widthHeight;
+            GraphicsFormat texFormat;
             if (!HasValidAsset)
-                return;
-
-            m_SplatCount = asset.splatCount;
-            m_GpuPosData = new GraphicsBuffer(GraphicsBuffer.Target.Raw | GraphicsBuffer.Target.CopySource, (int) (asset.posData.dataSize / 4), 4) { name = "GaussianPosData" };
-            m_GpuPosData.SetData(asset.posData.GetData<uint>());
-            m_GpuOtherData = new GraphicsBuffer(GraphicsBuffer.Target.Raw | GraphicsBuffer.Target.CopySource, (int) (asset.otherData.dataSize / 4), 4) { name = "GaussianOtherData" };
-            m_GpuOtherData.SetData(asset.otherData.GetData<uint>());
-            m_GpuSHData = new GraphicsBuffer(GraphicsBuffer.Target.Raw, (int) (asset.shData.dataSize / 4), 4) { name = "GaussianSHData" };
-            m_GpuSHData.SetData(asset.shData.GetData<uint>());
-            var (texWidth, texHeight) = GaussianSplatAsset.CalcTextureSize(asset.splatCount);
-            var texFormat = GaussianSplatAsset.ColorFormatToGraphics(asset.colorFormat);
-            var tex = new Texture2D(texWidth, texHeight, texFormat, TextureCreationFlags.DontInitializePixels | TextureCreationFlags.IgnoreMipmapLimit | TextureCreationFlags.DontUploadUponCreate) { name = "GaussianColorData" };
-            tex.SetPixelData(asset.colorData.GetData<byte>(), 0);
-            tex.Apply(false, true);
-            m_GpuColorData = tex;
-            if (asset.chunkData != null && asset.chunkData.dataSize != 0)
             {
-                m_GpuChunks = new GraphicsBuffer(GraphicsBuffer.Target.Structured,
-                    (int) (asset.chunkData.dataSize / UnsafeUtility.SizeOf<GaussianSplatAsset.ChunkInfo>()),
-                    UnsafeUtility.SizeOf<GaussianSplatAsset.ChunkInfo>()) {name = "GaussianChunkData"};
-                m_GpuChunks.SetData(asset.chunkData.GetData<GaussianSplatAsset.ChunkInfo>());
-                m_GpuChunksValid = true;
+                //NativeArray<InputSplatData> splats = GetDataFromPLY();
+                //GetSplatPositionsFromInputSplatData(splats);
+
+                return;
             }
             else
-            {
-                // just a dummy chunk buffer
-                m_GpuChunks = new GraphicsBuffer(GraphicsBuffer.Target.Structured, 1,
-                    UnsafeUtility.SizeOf<GaussianSplatAsset.ChunkInfo>()) {name = "GaussianChunkData"};
-                m_GpuChunksValid = false;
+            { 
+                m_SplatCount = asset.splatCount;
+                m_GpuPosData = new GraphicsBuffer(GraphicsBuffer.Target.Raw | GraphicsBuffer.Target.CopySource, (int)(asset.posData.dataSize / 4), 4) { name = "GaussianPosData" };
+                m_GpuPosData.SetData(asset.posData.GetData<uint>());
+                m_GpuOtherData = new GraphicsBuffer(GraphicsBuffer.Target.Raw | GraphicsBuffer.Target.CopySource, (int) (asset.otherData.dataSize / 4), 4) { name = "GaussianOtherData" };
+                m_GpuOtherData.SetData(asset.otherData.GetData<uint>());
+                m_GpuSHData = new GraphicsBuffer(GraphicsBuffer.Target.Raw, (int) (asset.shData.dataSize / 4), 4) { name = "GaussianSHData" };
+                m_GpuSHData.SetData(asset.shData.GetData<uint>());
+                widthHeight = GaussianSplatAsset.CalcTextureSize(asset.splatCount).ToTuple();
+                texFormat = GaussianSplatAsset.ColorFormatToGraphics(asset.colorFormat);
             }
 
-            m_GpuView = new GraphicsBuffer(GraphicsBuffer.Target.Structured, m_Asset.splatCount, kGpuViewDataSize);
+
+            //var (texWidth, texHeight) = GaussianSplatAsset.CalcTextureSize(asset.splatCount);
+
+            if (HasValidAsset)
+            {
+                var tex = new Texture2D(widthHeight.Item1, widthHeight.Item2, texFormat, TextureCreationFlags.DontInitializePixels | TextureCreationFlags.IgnoreMipmapLimit | TextureCreationFlags.DontUploadUponCreate) { name = "GaussianColorData" };
+                tex.SetPixelData(asset.colorData.GetData<byte>(), 0);
+                tex.Apply(false, true);
+                m_GpuColorData = tex;
+
+                if (asset.chunkData != null && asset.chunkData.dataSize != 0)
+                {
+                    m_GpuChunks = new GraphicsBuffer(GraphicsBuffer.Target.Structured,
+                        (int)(asset.chunkData.dataSize / UnsafeUtility.SizeOf<GaussianSplatAsset.ChunkInfo>()),
+                        UnsafeUtility.SizeOf<GaussianSplatAsset.ChunkInfo>())
+                    { name = "GaussianChunkData" };
+                    m_GpuChunks.SetData(asset.chunkData.GetData<GaussianSplatAsset.ChunkInfo>());
+                    m_GpuChunksValid = true;
+                }
+                else
+                {
+                    // just a dummy chunk buffer
+                    m_GpuChunks = new GraphicsBuffer(GraphicsBuffer.Target.Structured, 1,
+                        UnsafeUtility.SizeOf<GaussianSplatAsset.ChunkInfo>())
+                    { name = "GaussianChunkData" };
+                    m_GpuChunksValid = false;
+                }
+            }
+            if (HasValidAsset)
+            {
+                m_GpuView = new GraphicsBuffer(GraphicsBuffer.Target.Structured, m_Asset.splatCount, kGpuViewDataSize);
+            }else
+            {
+                m_GpuView = new GraphicsBuffer(GraphicsBuffer.Target.Structured, m_SplatCount, kGpuViewDataSize);
+            }
             m_GpuIndexBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Index, 36, 2);
             // cube indices, most often we use only the first quad
             m_GpuIndexBuffer.SetData(new ushort[]
@@ -1164,5 +1190,63 @@ namespace GaussianSplatting.Runtime
         }
 
         public GraphicsBuffer GpuEditDeleted => m_GpuEditDeleted;
+
+        #region PLY_LOADER
+        private void GetSplatPositionsFromInputSplatData(NativeArray<GaussianSplatAssetRuntimeCreator.InputSplatData> splats)
+        {
+            // pos
+            DisposeBuffer(ref m_GpuPosData);
+            m_GpuPosData = new GraphicsBuffer(GraphicsBuffer.Target.Raw | GraphicsBuffer.Target.CopySource, (int)(m_SplatCount * 4), 4) { name = "GaussianPosData" };
+
+            var pos = splats.Select(x => x.pos).ToArray();
+            unsafe
+            {
+                NativeArray<byte> m_OutputFloat32 = new NativeArray<byte>(splatCount * 12, Allocator.Temp);
+                for (int i = 0; i < splatCount; i++)
+                {
+                    byte* outputPtr2 = (byte*)m_OutputFloat32.GetUnsafePtr() + i * 12;
+
+                    *(float*)outputPtr2 = pos[i].x;
+                    *(float*)(outputPtr2 + 4) = pos[i].y;
+                    *(float*)(outputPtr2 + 8) = pos[i].z;
+                }
+                var array = m_OutputFloat32.Reinterpret<uint>(1);
+                m_GpuPosData.SetData(array);
+            }
+        }
+
+        private NativeArray<GaussianSplatAssetRuntimeCreator.InputSplatData> GetDataFromPLY()
+        {
+            NativeArray<GaussianSplatAssetRuntimeCreator.InputSplatData> inputSplats = new NativeArray<GaussianSplatAssetRuntimeCreator.InputSplatData>();
+            inputSplats = GaussianSplatAssetRuntimeCreator.LoadPLYSplatFile("./Assets/GaussianAssets/gs_primevere_long-edit.ply");
+            m_SplatCount = inputSplats.Length;
+
+            //unsafe
+            //{
+                //float3 boundsMin, boundsMax;
+                //var boundsJob = new GaussianSplatAssetRuntimeCreator.CalcBoundsJob
+                //{
+                //    m_BoundsMin = &boundsMin,
+                //    m_BoundsMax = &boundsMax,
+                //    m_SplatData = inputSplats
+                //};
+
+                //boundsJob.Schedule().Complete();
+                //GaussianSplatAssetRuntimeCreator.ReorderMorton(inputSplats, boundsMin, boundsMax);
+
+
+                // cluster SHs
+                //NativeArray<int> splatSHIndices = default;
+                //NativeArray<GaussianSplatAsset.SHTableItemFloat16> clusteredSHs = default;
+                //if (m_FormatSH >= GaussianSplatAsset.SHFormat.Cluster64k)
+                //{
+                //    EditorUtility.DisplayProgressBar(kProgressTitle, "Cluster SHs", 0.2f);
+                //    ClusterSHs(inputSplats, m_FormatSH, out clusteredSHs, out splatSHIndices);
+                //}
+            //}            
+
+            return inputSplats;
+        }
+        #endregion
     }
 }

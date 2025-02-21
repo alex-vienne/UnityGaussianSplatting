@@ -2,6 +2,7 @@
 //  Author: Ashkan Ashtiani
 //  Gist on Github: https://gist.github.com/3dln/c16d000b174f7ccf6df9a1cb0cef7f80
 
+using GaussianSplatting.Runtime;
 using System;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -21,11 +22,20 @@ public class CameraOrbit : MonoBehaviour
     float x = 0.0f;
     float y = 0.0f;
 
+    private Vector3 lastPosition;
+    private float mouseSensitivity = 0.001f;
+
+
+    GameObject GSModel;
+
     void Start()
     {
         var angles = transform.eulerAngles;
         x = angles.y;
         y = angles.x;
+
+        GSModel = FindFirstObjectByType<GaussianSplatRenderer>().gameObject;
+
     }
 
     float prevDistance;
@@ -34,10 +44,9 @@ public class CameraOrbit : MonoBehaviour
     {
         if (!EventSystem.current.IsPointerOverGameObject())
         {
-
-            if (distance < 2) distance = 2;
+            if (distance < 0.5f) distance = 0.5f;
             distance -= Input.GetAxis("Mouse ScrollWheel") * 2;
-            if (target && (Input.GetMouseButton(0) || Input.GetMouseButton(1)))
+            if (target && (Input.GetMouseButton(0)))
             {
                 var pos = Input.mousePosition;
                 var dpiScale = 1f;
@@ -75,6 +84,23 @@ public class CameraOrbit : MonoBehaviour
                 var po = rot * new Vector3(0.0f, 0.0f, -distance) + target.transform.position;
                 transform.rotation = rot;
                 transform.position = po;
+            }
+
+
+            // pan (to correct with orbit Target
+            if (Input.GetMouseButtonDown(1))
+            {
+                lastPosition = Input.mousePosition;
+            }
+
+            float panSpeed = 0.1f;
+            if (Input.GetMouseButton(1))
+            {
+                Camera.main.transform.parent.Translate(transform.right * -Input.GetAxis("Mouse X") * panSpeed, Space.World);
+                Camera.main.transform.parent.Translate(transform.up * -Input.GetAxis("Mouse Y") * panSpeed, Space.World);
+
+                target.transform.Translate(transform.right * -Input.GetAxis("Mouse X") * panSpeed, Space.World);
+                target.transform.Translate(transform.up * -Input.GetAxis("Mouse Y") * panSpeed, Space.World);
             }
         }
     }
