@@ -2,6 +2,7 @@
 using GaussianSplatting.RuntimeCreator;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -387,42 +388,55 @@ namespace GaussianSplatting.Runtime
             ExportData,
             CopySplats,
         }
-
         public bool HasValidAsset =>
-            m_Asset != null &&
-            m_Asset.splatCount > 0 &&
-            m_Asset.formatVersion == GaussianSplatAsset.kCurrentVersion &&
-            m_Asset.posData != null &&
-            m_Asset.otherData != null &&
-            m_Asset.shData != null &&
-            m_Asset.colorData != null;
+           (m_Asset != null &&
+           m_Asset.splatCount > 0 &&
+           m_Asset.formatVersion == GaussianSplatAsset.kCurrentVersion &&
+           m_Asset.posData != null &&
+           m_Asset.otherData != null &&
+           m_Asset.shData != null &&
+           m_Asset.colorData != null) || HasValidPLY;
+
+        public bool HasValidPLY = false;
+
+        //public bool HasValidAsset = true;
+
         public bool HasValidRenderSetup => m_GpuPosData != null && m_GpuOtherData != null && m_GpuChunks != null;
+
+        //public bool HasValidRenderSetup =true;
 
         const int kGpuViewDataSize = 40;
 
-        void CreateResourcesForAsset()
+        public void CreateResourcesForAsset(string plyFile)
         {
+            HasValidPLY = false;
             Tuple<int, int> widthHeight;
+            NativeArray<GaussianSplatAssetRuntimeCreator.InputSplatData> splats;
             GraphicsFormat texFormat;
             if (!HasValidAsset)
             {
                 // todo
-                //NativeArray<GaussianSplatAssetRuntimeCreator.InputSplatData> splats = GetDataFromPLY();
-                //GetSplatPositionsFromInputSplatData(splats);
-
-                //widthHeight = GaussianSplatAsset.CalcTextureSize(splatCount).ToTuple();
-                //texFormat = GaussianSplatAsset.ColorFormatToGraphics(GaussianSplatAsset.ColorFormat.Float16x4);
+                ReadDatafromPLY(plyFile, out widthHeight, out splats, out texFormat);
                 return;
             }
             else
-            { 
+            {
                 m_SplatCount = asset.splatCount;
+                //splats = GetDataFromPLY();
+                //GetSplatPositionsFromInputSplatData(splats);
                 m_GpuPosData = new GraphicsBuffer(GraphicsBuffer.Target.Raw | GraphicsBuffer.Target.CopySource, (int)(asset.posData.dataSize / 4), 4) { name = "GaussianPosData" };
                 m_GpuPosData.SetData(asset.posData.GetData<uint>());
-                m_GpuOtherData = new GraphicsBuffer(GraphicsBuffer.Target.Raw | GraphicsBuffer.Target.CopySource, (int) (asset.otherData.dataSize / 4), 4) { name = "GaussianOtherData" };
+
+                //GetSplatOthersFromInputSplatData(splats);
+                m_GpuOtherData = new GraphicsBuffer(GraphicsBuffer.Target.Raw | GraphicsBuffer.Target.CopySource, (int)(asset.otherData.dataSize / 4), 4) { name = "GaussianOtherData" };
                 m_GpuOtherData.SetData(asset.otherData.GetData<uint>());
-                m_GpuSHData = new GraphicsBuffer(GraphicsBuffer.Target.Raw, (int) (asset.shData.dataSize / 4), 4) { name = "GaussianSHData" };
+
+                //GetSplatSHFromInputSplatData(splats);
+                m_GpuSHData = new GraphicsBuffer(GraphicsBuffer.Target.Raw, (int)(asset.shData.dataSize), 4) { name = "GaussianSHData" };
                 m_GpuSHData.SetData(asset.shData.GetData<uint>());
+
+                //widthHeight = GaussianSplatAsset.CalcTextureSize(splatCount).ToTuple();
+                //texFormat = GaussianSplatAsset.ColorFormatToGraphics(GaussianSplatAsset.ColorFormat.Float16x4);
                 widthHeight = GaussianSplatAsset.CalcTextureSize(asset.splatCount).ToTuple();
                 texFormat = GaussianSplatAsset.ColorFormatToGraphics(asset.colorFormat);
             }
@@ -432,6 +446,7 @@ namespace GaussianSplatting.Runtime
 
             if (HasValidAsset)
             {
+                //GetSplatColorFromInputSplatData(splats);
                 var tex = new Texture2D(widthHeight.Item1, widthHeight.Item2, texFormat, TextureCreationFlags.DontInitializePixels | TextureCreationFlags.IgnoreMipmapLimit | TextureCreationFlags.DontUploadUponCreate) { name = "GaussianColorData" };
                 tex.SetPixelData(asset.colorData.GetData<byte>(), 0);
                 tex.Apply(false, true);
@@ -457,8 +472,9 @@ namespace GaussianSplatting.Runtime
             }
             if (HasValidAsset)
             {
-                m_GpuView = new GraphicsBuffer(GraphicsBuffer.Target.Structured, m_Asset.splatCount, kGpuViewDataSize);
-            }else
+                m_GpuView = new GraphicsBuffer(GraphicsBuffer.Target.Structured, m_SplatCount, kGpuViewDataSize);
+            }
+            else
             {
                 m_GpuView = new GraphicsBuffer(GraphicsBuffer.Target.Structured, m_SplatCount, kGpuViewDataSize);
             }
@@ -475,6 +491,46 @@ namespace GaussianSplatting.Runtime
             });
 
             InitSortBuffers(splatCount);
+        }
+
+        private void ReadDatafromPLY(string plyFile, out Tuple<int, int> widthHeight, out NativeArray<GaussianSplatAssetRuntimeCreator.InputSplatData> splats, out GraphicsFormat texFormat)
+        {
+            widthHeight = new Tuple<int, int>(0, 0);
+            texFormat = new GraphicsFormat();
+            splats = GetDataFromPLY(plyFile);
+            if (splats.Length > 0)
+            {
+                GetSplatPositionsFromInputSplatData(splats);
+                GetSplatOthersFromInputSplatData(splats);
+                GetSplatSHFromInputSplatData(splats);
+                GetSplatColorFromInputSplatData(splats);
+
+                widthHeight = GaussianSplatAsset.CalcTextureSize(splatCount).ToTuple();
+                texFormat = GaussianSplatAsset.ColorFormatToGraphics(GaussianSplatAsset.ColorFormat.Float16x4);
+                // just a dummy chunk buffer
+                m_GpuChunks = new GraphicsBuffer(GraphicsBuffer.Target.Structured, 1,
+                    UnsafeUtility.SizeOf<GaussianSplatAsset.ChunkInfo>())
+                { name = "GaussianChunkData" };
+                m_GpuChunksValid = false;
+
+                m_GpuView = new GraphicsBuffer(GraphicsBuffer.Target.Structured, m_SplatCount, kGpuViewDataSize);
+
+                m_GpuIndexBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Index, 36, 2);
+                // cube indices, most often we use only the first quad
+                m_GpuIndexBuffer.SetData(new ushort[]
+                {
+                0, 1, 2, 1, 3, 2,
+                4, 6, 5, 5, 6, 7,
+                0, 2, 4, 4, 2, 6,
+                1, 5, 3, 5, 7, 3,
+                0, 4, 1, 4, 5, 1,
+                2, 3, 6, 3, 7, 6
+                });
+
+                InitSortBuffers(splatCount);
+                HasValidPLY = true;
+            }
+            //Reset(0);
         }
 
         bool IsRadixSupported => (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D12 || SystemInfo.graphicsDeviceType == GraphicsDeviceType.Vulkan);
@@ -519,10 +575,10 @@ namespace GaussianSplatting.Runtime
 
         public void OnEnable()
         {
-            InitializeGS();
+            InitializeGS(null);
         }
 
-        private void InitializeGS()
+        public void InitializeGS(string plyFile)
         {
             m_FrameCounter = 0;
             if (m_ShaderSplats == null || m_ShaderComposite == null || m_ShaderDebugPoints == null || m_ShaderDebugBoxes == null || m_CSSplatUtilities == null)
@@ -542,7 +598,7 @@ namespace GaussianSplatting.Runtime
                 m_Sorter = new GpuSortingFFX(m_CSSplatUtilitiesFFX);
             GaussianSplatRenderSystem.instance.RegisterSplat(this);
 
-            CreateResourcesForAsset();
+            CreateResourcesForAsset(plyFile);
         }
 
         void SetAssetDataOnCS(CommandBuffer cmb, KernelIndices kernel)
@@ -603,7 +659,7 @@ namespace GaussianSplatting.Runtime
             cmb.SetComputeBufferParam(cs, kernelIndex, Props.OrderBuffer, m_GpuSortKeys);
 
             cmb.SetComputeIntParam(cs, Props.SplatBitsValid, m_GpuEditSelected != null && m_GpuEditDeleted != null ? 1 : 0);
-            uint format = (uint)m_Asset.posFormat | ((uint)m_Asset.scaleFormat << 8) | ((uint)m_Asset.shFormat << 16);
+            uint format = (uint)GaussianSplatAsset.VectorFormat.Float32 | ((uint)GaussianSplatAsset.VectorFormat.Float32 << 8) | ((uint)GaussianSplatAsset.SHFormat.Float32 << 16);
             cmb.SetComputeIntParam(cs, Props.SplatFormat, (int)format);
             cmb.SetComputeIntParam(cs, Props.SplatCount, m_SplatCount);
             cmb.SetComputeIntParam(cs, Props.SplatChunkCount, m_GpuChunksValid ? m_GpuChunks.count : 0);
@@ -622,7 +678,7 @@ namespace GaussianSplatting.Runtime
             mat.SetBuffer(Props.SplatSelectedBits, m_GpuEditSelected ?? m_GpuPosData);
             mat.SetBuffer(Props.SplatDeletedBits, m_GpuEditDeleted ?? m_GpuPosData);
             mat.SetInt(Props.SplatBitsValid, m_GpuEditSelected != null && m_GpuEditDeleted != null ? 1 : 0);
-            uint format = (uint)m_Asset.posFormat | ((uint)m_Asset.scaleFormat << 8) | ((uint)m_Asset.shFormat << 16);
+            uint format = (uint)GaussianSplatAsset.VectorFormat.Float32 | ((uint)GaussianSplatAsset.VectorFormat.Float32 << 8) | ((uint)GaussianSplatAsset.SHFormat.Float32 << 16);
             mat.SetInteger(Props.SplatFormat, (int)format);
             mat.SetInteger(Props.SplatCount, m_SplatCount);
             mat.SetInteger(Props.SplatChunkCount, m_GpuChunksValid ? m_GpuChunks.count : 0);
@@ -741,7 +797,7 @@ namespace GaussianSplatting.Runtime
             cmd.SetComputeBufferParam(m_CSSplatUtilities, (int)KernelIndices.CalcDistances, Props.SplatSortKeys, m_GpuSortKeys);
             cmd.SetComputeBufferParam(m_CSSplatUtilities, (int)KernelIndices.CalcDistances, Props.SplatChunks, m_GpuChunks);
             cmd.SetComputeBufferParam(m_CSSplatUtilities, (int)KernelIndices.CalcDistances, Props.SplatPos, m_GpuPosData);
-            cmd.SetComputeIntParam(m_CSSplatUtilities, Props.SplatFormat, (int)m_Asset.posFormat);
+            cmd.SetComputeIntParam(m_CSSplatUtilities, Props.SplatFormat, (int)GaussianSplatAsset.VectorFormat.Float32);
             cmd.SetComputeMatrixParam(m_CSSplatUtilities, Props.MatrixMV, worldToCamMatrix * matrix);
             cmd.SetComputeIntParam(m_CSSplatUtilities, Props.SplatCount, m_SplatCount);
             cmd.SetComputeIntParam(m_CSSplatUtilities, Props.SplatChunkCount, m_GpuChunksValid ? m_GpuChunks.count : 0);
@@ -761,7 +817,7 @@ namespace GaussianSplatting.Runtime
                 m_PrevAsset = m_Asset;
                 m_PrevHash = curHash;
                 DisposeResourcesForAsset();
-                CreateResourcesForAsset();
+                CreateResourcesForAsset(null);
             }
         }
 
@@ -1195,13 +1251,13 @@ namespace GaussianSplatting.Runtime
         public GraphicsBuffer GpuEditDeleted => m_GpuEditDeleted;
 
         #region PLY_LOADER
-        private void GetSplatPositionsFromInputSplatData(NativeArray<GaussianSplatAssetRuntimeCreator.InputSplatData> splats)
+        private void GetSplatPositionsFromInputSplatData(NativeArray<GaussianSplatAssetRuntimeCreator.InputSplatData> inputSplats)
         {
             // pos
             DisposeBuffer(ref m_GpuPosData);
             m_GpuPosData = new GraphicsBuffer(GraphicsBuffer.Target.Raw | GraphicsBuffer.Target.CopySource, (int)(m_SplatCount * 4), 4) { name = "GaussianPosData" };
 
-            var pos = splats.Select(x => x.pos).ToArray();
+            var pos = inputSplats.Select(x => x.pos).ToArray();
             unsafe
             {
                 NativeArray<byte> m_OutputFloat32 = new NativeArray<byte>(splatCount * 12, Allocator.Temp);
@@ -1216,59 +1272,221 @@ namespace GaussianSplatting.Runtime
                 var array = m_OutputFloat32.Reinterpret<uint>(1);
                 m_GpuPosData.SetData(array);
             }
+        }
 
+        private void GetSplatOthersFromInputSplatData(NativeArray<GaussianSplatAssetRuntimeCreator.InputSplatData> inputSplats)
+        {
             //other
-            /*
-            // todo
-            var m_FormatScale = GaussianSplatAsset.VectorFormat.Norm16;
+            NativeArray<int> splatSHIndices = default;
+
+            var m_FormatScale = GaussianSplatAsset.VectorFormat.Float32;
+            var m_ScaleFormat = GaussianSplatAsset.VectorFormat.Float32;
+            var m_FormatSH = GaussianSplatAsset.SHFormat.Float32;
+
             int formatSize = GaussianSplatAsset.GetOtherSizeNoSHIndex(m_FormatScale);
+            int m_FormatSize = formatSize;
+            if (splatSHIndices.IsCreated)
+                formatSize += 2;
+            int dataLen = inputSplats.Length * formatSize;
+
 
             DisposeBuffer(ref m_GpuOtherData);
-            //m_GpuOtherData = new GraphicsBuffer(GraphicsBuffer.Target.Raw | GraphicsBuffer.Target.CopySource, (int)(asset.otherData.dataSize / 4), 4) { name = "GaussianOtherData" };
+            m_GpuOtherData = new GraphicsBuffer(GraphicsBuffer.Target.Raw | GraphicsBuffer.Target.CopySource, (int)(dataLen/*splatCount*10*/ ), 4) { name = "GaussianOtherData" };
             unsafe
             {
-                NativeArray<byte> m_OutputFloat32 = new NativeArray<byte>(splatCount * 12, Allocator.Temp);
+                NativeArray<byte> m_OutputFloat32 = new NativeArray<byte>(splatCount * 16, Allocator.Temp);
                 for (int i = 0; i < splatCount; i++)
                 {
                     byte* outputPtr = (byte*)m_OutputFloat32.GetUnsafePtr() + i * m_FormatSize;
 
                     // rotation: 4 bytes
                     {
-                        Quaternion rotQ = splats[i].rot;
+                        Quaternion rotQ = inputSplats[i].rot;
                         float4 rot = new float4(rotQ.x, rotQ.y, rotQ.z, rotQ.w);
-                        uint enc = EncodeQuatToNorm10(rot);
+                        uint enc = GaussianSplatAssetRuntimeCreator.EncodeQuatToNorm10(rot);
                         *(uint*)outputPtr = enc;
                         outputPtr += 4;
                     }
 
                     // scale: 6, 4 or 2 bytes
-                    EmitEncodedVector(splats[i].scale, outputPtr, m_ScaleFormat);
+                    float3 scale = inputSplats[i].scale;
+
+                    GaussianSplatAssetRuntimeCreator.EmitEncodedVector( scale, outputPtr, m_ScaleFormat);
                     outputPtr += GaussianSplatAsset.GetVectorSize(m_ScaleFormat);
 
+                    // cluster SHs
+                    NativeArray<GaussianSplatAsset.SHTableItemFloat16> clusteredSHs = default;
+                    if (m_FormatSH >= GaussianSplatAsset.SHFormat.Cluster64k)
+                    {
+                        //EditorUtility.DisplayProgressBar(kProgressTitle, "Cluster SHs", 0.2f);
+                        GaussianSplatAssetRuntimeCreator.ClusterSHs(inputSplats, m_FormatSH, out clusteredSHs, out splatSHIndices);
+                    }
+                    //var m_SplatSHIndices = new NativeArray<int>(splatSHIndices, Allocator.Persistent);
                     // SH index
-                    if (m_SplatSHIndices.IsCreated)
-                        *(ushort*)outputPtr = (ushort)m_SplatSHIndices[i];
+                    //if (m_SplatSHIndices.IsCreated)
+                    //    *(ushort*)outputPtr = (ushort)m_SplatSHIndices[i];
                 }
 
+                var array = m_OutputFloat32.Reinterpret<uint>(1);
+                m_GpuOtherData.SetData(array);
             }
-            */
-            //var other = splats.Select(x => x.).ToArray();
-
-
-            //m_GpuOtherData.SetData(asset.otherData.GetData<uint>());
-            //if (splatSHIndices.IsCreated)
-            //    formatSize += 2;
-            //int dataLen = inputSplats.Length * formatSize;
-
-            //dataLen = NextMultipleOf(dataLen, 8); // serialized as ulong
-            //NativeArray<byte> data = new(dataLen, Allocator.TempJob);
-
         }
 
-        private NativeArray<GaussianSplatAssetRuntimeCreator.InputSplatData> GetDataFromPLY()
+        private void GetSplatSHFromInputSplatData(NativeArray<GaussianSplatAssetRuntimeCreator.InputSplatData> inputSplats)
         {
+            DisposeBuffer(ref m_GpuSHData);
+            m_GpuSHData = new GraphicsBuffer(GraphicsBuffer.Target.Raw, splatCount * 12 * 16, 4) { name = "GaussianSHData" };
+            unsafe
+            {
+                var m_Format = GaussianSplatAsset.SHFormat.Float32;
+
+                NativeArray<byte> m_OutputFloat32 = new NativeArray<byte>(splatCount * 16 *12, Allocator.Temp);
+
+                for (int i = 0; i < splatCount; i++)
+                {
+                    var splat = inputSplats[i];
+
+                    switch (m_Format)
+                    {
+                        case GaussianSplatAsset.SHFormat.Float32:
+                            {
+                                GaussianSplatAsset.SHTableItemFloat32 res;
+                                res.sh1 = splat.sh1;
+                                res.sh2 = splat.sh2;
+                                res.sh3 = splat.sh3;
+                                res.sh4 = splat.sh4;
+                                res.sh5 = splat.sh5;
+                                res.sh6 = splat.sh6;
+                                res.sh7 = splat.sh7;
+                                res.sh8 = splat.sh8;
+                                res.sh9 = splat.sh9;
+                                res.shA = splat.shA;
+                                res.shB = splat.shB;
+                                res.shC = splat.shC;
+                                res.shD = splat.shD;
+                                res.shE = splat.shE;
+                                res.shF = splat.shF;
+                                res.shPadding = default;
+                                ((GaussianSplatAsset.SHTableItemFloat32*)m_OutputFloat32.GetUnsafePtr())[i] = res;
+                            }
+                            break;
+                        case GaussianSplatAsset.SHFormat.Float16:
+                            {
+                                GaussianSplatAsset.SHTableItemFloat16 res;
+                                res.sh1 = new half3(splat.sh1);
+                                res.sh2 = new half3(splat.sh2);
+                                res.sh3 = new half3(splat.sh3);
+                                res.sh4 = new half3(splat.sh4);
+                                res.sh5 = new half3(splat.sh5);
+                                res.sh6 = new half3(splat.sh6);
+                                res.sh7 = new half3(splat.sh7);
+                                res.sh8 = new half3(splat.sh8);
+                                res.sh9 = new half3(splat.sh9);
+                                res.shA = new half3(splat.shA);
+                                res.shB = new half3(splat.shB);
+                                res.shC = new half3(splat.shC);
+                                res.shD = new half3(splat.shD);
+                                res.shE = new half3(splat.shE);
+                                res.shF = new half3(splat.shF);
+                                res.shPadding = default;
+                                ((GaussianSplatAsset.SHTableItemFloat16*)m_OutputFloat32.GetUnsafePtr())[i] = res;
+                            }
+                            break;
+                        case GaussianSplatAsset.SHFormat.Norm11:
+                            {
+                                GaussianSplatAsset.SHTableItemNorm11 res;
+                                res.sh1 = GaussianSplatAssetRuntimeCreator.EncodeFloat3ToNorm11(splat.sh1);
+                                res.sh2 = GaussianSplatAssetRuntimeCreator.EncodeFloat3ToNorm11(splat.sh2);
+                                res.sh3 = GaussianSplatAssetRuntimeCreator.EncodeFloat3ToNorm11(splat.sh3);
+                                res.sh4 = GaussianSplatAssetRuntimeCreator.EncodeFloat3ToNorm11(splat.sh4);
+                                res.sh5 = GaussianSplatAssetRuntimeCreator.EncodeFloat3ToNorm11(splat.sh5);
+                                res.sh6 = GaussianSplatAssetRuntimeCreator.EncodeFloat3ToNorm11(splat.sh6);
+                                res.sh7 = GaussianSplatAssetRuntimeCreator.EncodeFloat3ToNorm11(splat.sh7);
+                                res.sh8 = GaussianSplatAssetRuntimeCreator.EncodeFloat3ToNorm11(splat.sh8);
+                                res.sh9 = GaussianSplatAssetRuntimeCreator.EncodeFloat3ToNorm11(splat.sh9);
+                                res.shA = GaussianSplatAssetRuntimeCreator.EncodeFloat3ToNorm11(splat.shA);
+                                res.shB = GaussianSplatAssetRuntimeCreator.EncodeFloat3ToNorm11(splat.shB);
+                                res.shC = GaussianSplatAssetRuntimeCreator.EncodeFloat3ToNorm11(splat.shC);
+                                res.shD = GaussianSplatAssetRuntimeCreator.EncodeFloat3ToNorm11(splat.shD);
+                                res.shE = GaussianSplatAssetRuntimeCreator.EncodeFloat3ToNorm11(splat.shE);
+                                res.shF = GaussianSplatAssetRuntimeCreator.EncodeFloat3ToNorm11(splat.shF);
+                                ((GaussianSplatAsset.SHTableItemNorm11*)m_OutputFloat32.GetUnsafePtr())[i] = res;
+                            }
+                            break;
+                        case GaussianSplatAsset.SHFormat.Norm6:
+                            {
+                                GaussianSplatAsset.SHTableItemNorm6 res;
+                                res.sh1 = GaussianSplatAssetRuntimeCreator.EncodeFloat3ToNorm565(splat.sh1);
+                                res.sh2 = GaussianSplatAssetRuntimeCreator.EncodeFloat3ToNorm565(splat.sh2);
+                                res.sh3 = GaussianSplatAssetRuntimeCreator.EncodeFloat3ToNorm565(splat.sh3);
+                                res.sh4 = GaussianSplatAssetRuntimeCreator.EncodeFloat3ToNorm565(splat.sh4);
+                                res.sh5 = GaussianSplatAssetRuntimeCreator.EncodeFloat3ToNorm565(splat.sh5);
+                                res.sh6 = GaussianSplatAssetRuntimeCreator.EncodeFloat3ToNorm565(splat.sh6);
+                                res.sh7 = GaussianSplatAssetRuntimeCreator.EncodeFloat3ToNorm565(splat.sh7);
+                                res.sh8 = GaussianSplatAssetRuntimeCreator.EncodeFloat3ToNorm565(splat.sh8);
+                                res.sh9 = GaussianSplatAssetRuntimeCreator.EncodeFloat3ToNorm565(splat.sh9);
+                                res.shA = GaussianSplatAssetRuntimeCreator.EncodeFloat3ToNorm565(splat.shA);
+                                res.shB = GaussianSplatAssetRuntimeCreator.EncodeFloat3ToNorm565(splat.shB);
+                                res.shC = GaussianSplatAssetRuntimeCreator.EncodeFloat3ToNorm565(splat.shC);
+                                res.shD = GaussianSplatAssetRuntimeCreator.EncodeFloat3ToNorm565(splat.shD);
+                                res.shE = GaussianSplatAssetRuntimeCreator.EncodeFloat3ToNorm565(splat.shE);
+                                res.shF = GaussianSplatAssetRuntimeCreator.EncodeFloat3ToNorm565(splat.shF);
+                                res.shPadding = default;
+                                ((GaussianSplatAsset.SHTableItemNorm6*)m_OutputFloat32.GetUnsafePtr())[i] = res;
+                            }
+                            break;
+                        default:
+                            break;
+                    }
+                }
+
+                var array = m_OutputFloat32.Reinterpret<uint>(1);
+                m_GpuSHData.SetData(array);
+            }
+        }
+
+        private void GetSplatColorFromInputSplatData(NativeArray<GaussianSplatAssetRuntimeCreator.InputSplatData> inputSplats)
+        {            
+            var (width, height) = GaussianSplatAsset.CalcTextureSize(inputSplats.Length);
+            NativeArray<float4> m_OutputFloat4 = new NativeArray<float4>(width *height, Allocator.Temp);
+            for (int i = 0; i < splatCount; i++)
+            {
+                var splat = inputSplats[i];
+                int j = GaussianSplatAssetRuntimeCreator.SplatIndexToTextureIndex((uint)i);
+                m_OutputFloat4[j] = new float4(splat.dc0.x, splat.dc0.y, splat.dc0.z, splat.opacity);
+            }
+
+            var texFormat = GaussianSplatAsset.ColorFormatToGraphics(GaussianSplatAsset.ColorFormat.Float32x4);
+
+            var tex = new Texture2D(width, height, texFormat, TextureCreationFlags.DontInitializePixels | TextureCreationFlags.IgnoreMipmapLimit | TextureCreationFlags.DontUploadUponCreate) { name = "GaussianColorData" };
+            tex.SetPixelData(m_OutputFloat4, 0);
+            tex.Apply(false, true);
+            m_GpuColorData = tex;
+        }
+
+        private NativeArray<GaussianSplatAssetRuntimeCreator.InputSplatData> GetDataFromPLY(string plyFile)
+        {
+            //TextAsset plyFile = Resources.Load("gs_primevere_long-edit") as TextAsset;
+
             NativeArray<GaussianSplatAssetRuntimeCreator.InputSplatData> inputSplats = new NativeArray<GaussianSplatAssetRuntimeCreator.InputSplatData>();
-            inputSplats = GaussianSplatAssetRuntimeCreator.LoadPLYSplatFile("./Assets/GaussianAssets/gs_primevere_long-edit.ply");
+            //inputSplats = GaussianSplatAssetRuntimeCreator.LoadPLYSplatFile("./Assets/GaussianAssets/gs_primevere_long-edit.ply");
+
+            if (plyFile == null)
+            {
+                //inputSplats = GaussianSplatAssetRuntimeCreator.LoadPLYSplatFile(Application.streamingAssetsPath + "/gs_primevere_long-edit.ply");
+                //inputSplats = GaussianSplatAssetRuntimeCreator.LoadPLYSplatFile(plyFile);
+                //inputSplats = GaussianSplatAssetRuntimeCreator.LoadPLYSplatFile("./Assets/GaussianAssets/gs_Kaizen_inside_and_outside-edit.ply");
+            }
+            else
+            {
+                inputSplats = GaussianSplatAssetRuntimeCreator.LoadPLYSplatFile(plyFile);
+            }
+
+            if(inputSplats.Length == 0)
+            {
+                return inputSplats;
+            }
+
             m_SplatCount = inputSplats.Length;
 
             unsafe

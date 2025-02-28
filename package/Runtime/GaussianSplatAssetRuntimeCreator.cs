@@ -28,95 +28,12 @@ namespace GaussianSplatting.RuntimeCreator
             public Quaternion rot;
         }
 
-        //public static unsafe void ReadFile(string filePath, out NativeArray<InputSplatData> splats)
-        //{
-        //    NativeArray<byte> verticesRawData;
-        //    PLYFileReader.ReadFile(
-        //        filePath,
-        //        out var splatCount,
-        //        out var splatStride,
-        //        out List<string> headerInfo,
-        //        out verticesRawData
-        //    );
-        //    int expectedSize = UnsafeUtility.SizeOf<InputSplatData>();
-
-        //    if (splatStride == expectedSize)
-        //    {
-        //        NativeArray<float> floatData = verticesRawData.Reinterpret<float>(1);
-        //        ReorderSHs(splatCount, (float*)floatData.GetUnsafePtr());
-        //        splats = verticesRawData.Reinterpret<InputSplatData>(1);
-        //        LinearizeData(splats);
-        //        return;
-        //    }
-        //    else if (splatStride == 68)
-        //    {
-        //        var newSplats = new NativeArray<InputSplatData>(
-        //            splatCount,
-        //            Allocator.Persistent
-        //        );
-        //        NativeArray<float> floatData = verticesRawData.Reinterpret<float>(1);
-        //        for (int i = 0; i < splatCount; i++)
-        //        {
-        //            int baseIndex = i * 17;
-        //            InputSplatData splat = new InputSplatData();
-        //            splat.pos = new Vector3(
-        //                floatData[baseIndex + 0],
-        //                floatData[baseIndex + 1],
-        //                floatData[baseIndex + 2]
-        //            );
-        //            splat.nor = new Vector3(
-        //                floatData[baseIndex + 3],
-        //                floatData[baseIndex + 4],
-        //                floatData[baseIndex + 5]
-        //            );
-        //            splat.dc0 = new Vector3(
-        //                floatData[baseIndex + 6],
-        //                floatData[baseIndex + 7],
-        //                floatData[baseIndex + 8]
-        //            );
-        //            splat.opacity = floatData[baseIndex + 9];
-        //            splat.scale = new Vector3(
-        //                floatData[baseIndex + 10],
-        //                floatData[baseIndex + 11],
-        //                floatData[baseIndex + 12]
-        //            );
-        //            splat.rot = new Quaternion(
-        //                floatData[baseIndex + 13],
-        //                floatData[baseIndex + 14],
-        //                floatData[baseIndex + 15],
-        //                floatData[baseIndex + 16]
-        //            );
-        //            splat.sh1 =
-        //                splat.sh2 =
-        //                splat.sh3 =
-        //                splat.sh4 =
-        //                splat.sh5 =
-        //                splat.sh6 =
-        //                splat.sh7 =
-        //                splat.sh8 =
-        //                splat.sh9 =
-        //                splat.shA =
-        //                splat.shB =
-        //                splat.shC =
-        //                splat.shD =
-        //                splat.shE =
-        //                splat.shF =
-        //                    Vector3.zero;
-        //            newSplats[i] = splat;
-        //        }
-        //        splats = newSplats;
-        //        LinearizeData(splats);
-        //        return;
-        //    }
-        //    throw new IOException($"File {filePath} is not a supported format");
-        //}
-
         public unsafe static NativeArray<InputSplatData> LoadPLYSplatFile(string plyPath)
         {
             NativeArray<InputSplatData> data = default;
             if (!File.Exists(plyPath))
             {
-               // m_ErrorMessage = $"Did not find {plyPath} file";
+                //m_ErrorMessage = $"Did not find {plyPath} file";
                 return data;
             }
 
@@ -148,7 +65,38 @@ namespace GaussianSplatting.RuntimeCreator
             return data;
         }
 
-        //[BurstCompile]
+        public unsafe static NativeArray<InputSplatData> LoadPLYSplatFile(TextAsset textAsset)
+        {
+            NativeArray<InputSplatData> data = default;
+
+            int splatCount;
+            int vertexStride;
+            NativeArray<byte> verticesRawData;
+            try
+            {
+                PLYFileReader.ReadFile(textAsset, out splatCount, out vertexStride, out _, out verticesRawData);
+            }
+            catch (Exception ex)
+            {
+                // m_ErrorMessage = ex.Message;
+                return data;
+            }
+
+            if (UnsafeUtility.SizeOf<InputSplatData>() != vertexStride)
+            {
+                // m_ErrorMessage = $"PLY vertex size mismatch, expected {UnsafeUtility.SizeOf<InputSplatData>()} but file has {vertexStride}";
+                return data;
+            }
+
+            // reorder SHs
+            NativeArray<float> floatData = verticesRawData.Reinterpret<float>(1);
+            ReorderSHs(splatCount, (float*)floatData.GetUnsafePtr());
+
+            data = verticesRawData.Reinterpret<InputSplatData>(1);
+            LinearizeData(data);
+            return data;
+        }
+
         static unsafe void ReorderSHs(int splatCount, float* data)
         {
             int splatStride = UnsafeUtility.SizeOf<InputSplatData>() / 4;
@@ -378,6 +326,98 @@ namespace GaussianSplatting.RuntimeCreator
         public static bool ClusterSHProgress(float val)
         {            
             return true;
+        }
+
+        public static float4 DecodeNorm10ToQuat(uint encoded)
+        {
+            // Extraction des différentes composantes
+            float x = (encoded & 0x3FF) / 1023.5f;        // 10 bits pour x
+            float y = ((encoded >> 10) & 0x3FF) / 1023.5f; // 10 bits pour y
+            float z = ((encoded >> 20) & 0x3FF) / 1023.5f; // 10 bits pour z
+            float w = ((encoded >> 30) & 0x03) / 3.5f;     // 2 bits pour w
+
+            return new float4(x, y, z, w);
+        }
+
+        public static uint EncodeQuatToNorm10(float4 v) // 32 bits: 10.10.10.2
+        {
+            return (uint)(v.x * 1023.5f) | ((uint)(v.y * 1023.5f) << 10) | ((uint)(v.z * 1023.5f) << 20) | ((uint)(v.w * 3.5f) << 30);
+        }
+
+        public static uint decodeByteArrayToUint(byte[] buffer)
+        {
+            return ((uint)buffer[3] << 24) | ((uint)buffer[2] << 16) | ((uint)buffer[1] << 8) | (uint)buffer[0];
+        }
+
+        public static unsafe void EmitEncodedVector(float3 v, byte* outputPtr, GaussianSplatAsset.VectorFormat format)
+        {
+            switch (format)
+            {
+                case GaussianSplatAsset.VectorFormat.Float32:
+                    {
+                        *(float*)outputPtr = v.x;
+                        *(float*)(outputPtr + 4) = v.y;
+                        *(float*)(outputPtr + 8) = v.z;
+                    }
+                    break;
+                case GaussianSplatAsset.VectorFormat.Norm16:
+                    {
+                        ulong enc = EncodeFloat3ToNorm16(math.saturate(v));
+                        *(uint*)outputPtr = (uint)enc;
+                        *(ushort*)(outputPtr + 4) = (ushort)(enc >> 32);
+                    }
+                    break;
+                case GaussianSplatAsset.VectorFormat.Norm11:
+                    {
+                        uint enc = EncodeFloat3ToNorm11(math.saturate(v));
+                        *(uint*)outputPtr = enc;
+                    }
+                    break;
+                case GaussianSplatAsset.VectorFormat.Norm6:
+                    {
+                        ushort enc = EncodeFloat3ToNorm655(math.saturate(v));
+                        *(ushort*)outputPtr = enc;
+                    }
+                    break;
+            }
+        }
+
+        public static uint EncodeFloat3ToNorm11(float3 v) // 32 bits: 11.10.11
+        {
+            return (uint)(v.x * 2047.5f) | ((uint)(v.y * 1023.5f) << 11) | ((uint)(v.z * 2047.5f) << 21);
+        }
+
+        public static ushort EncodeFloat3ToNorm655(float3 v) // 16 bits: 6.5.5
+        {
+            return (ushort)((uint)(v.x * 63.5f) | ((uint)(v.y * 31.5f) << 6) | ((uint)(v.z * 31.5f) << 11));
+        }
+
+        public static ulong EncodeFloat3ToNorm16(float3 v) // 48 bits: 16.16.16
+        {
+            return (ulong)(v.x * 65535.5f) | ((ulong)(v.y * 65535.5f) << 16) | ((ulong)(v.z * 65535.5f) << 32);
+        }
+
+        public static float3 DecodeNorm16ToFloat3(ulong encoded)
+        {
+            float x = (encoded & 0xFFFF) / 65535.5f;
+            float y = ((encoded >> 16) & 0xFFFF) / 65535.5f;
+            float z = ((encoded >> 32) & 0xFFFF) / 65535.5f;
+            return new float3(x, y, z);
+        }
+
+        public static ushort EncodeFloat3ToNorm565(float3 v) // 16 bits: 5.6.5
+        {
+            return (ushort)((uint)(v.x * 31.5f) | ((uint)(v.y * 63.5f) << 5) | ((uint)(v.z * 31.5f) << 11));
+        }
+
+        public static int SplatIndexToTextureIndex(uint idx)
+        {
+            uint2 xy = GaussianUtils.DecodeMorton2D_16x16(idx);
+            uint width = GaussianSplatAsset.kTextureWidth / 16;
+            idx >>= 8;
+            uint x = (idx % width) * 16 + xy.x;
+            uint y = (idx / width) * 16 + xy.y;
+            return (int)(y * GaussianSplatAsset.kTextureWidth + x);
         }
     }
 }

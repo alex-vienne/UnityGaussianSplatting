@@ -25,6 +25,7 @@
 /projects/**/UserSettings/*
 /projects/**/obj/*
 /projects/GaussianExample-URP/Build/*
+/projects/GaussianExample-URP/Build_win/*
 
 
 /projects/**/.vs/*

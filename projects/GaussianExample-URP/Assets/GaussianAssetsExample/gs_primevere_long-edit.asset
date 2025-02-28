@@ -18,11 +18,11 @@ MonoBehaviour:
   m_BoundsMax: {x: 1.7262014, y: 1.1515299, z: 1.2689}
   m_DataHash:
     serializedVersion: 2
-    Hash: e69eee4d2e21b07398088134d95db239
+    Hash: b2b1c3140af728bc4dd1e4502af9c9f7
   m_PosFormat: 0
-  m_ScaleFormat: 1
-  m_SHFormat: 2
-  m_ColorFormat: 1
+  m_ScaleFormat: 0
+  m_SHFormat: 1
+  m_ColorFormat: 0
   m_PosData: {fileID: 4900000, guid: 4464b7280ec360c4792552fde7937fc9, type: 3}
   m_ColorData: {fileID: 4900000, guid: e1a1a9c8f5c89684686a18420853d906, type: 3}
   m_OtherData: {fileID: 4900000, guid: 854eab9d65d19c14e9d89337a7d2ea68, type: 3}

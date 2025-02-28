@@ -1,4 +1,5 @@
 using GaussianSplatting.Runtime;
+using GaussianSplatting.RuntimeCreator;
 using HSVPicker;
 using System;
 using Unity.Collections;
@@ -9,8 +10,8 @@ using UnityEngine.UI;
 
 public class GaussianSplatUI : MonoBehaviour
 {
-    public UnityEngine.UI.Slider PositionNoiseSlider;
-    public UnityEngine.UI.Text PositionNoiseText;
+    public Slider PositionNoiseSlider;
+    public Text PositionNoiseText;
     private GaussianSplatRenderer gsRenderer;
     private ColorPicker colorPicker;
     private GameObject panelGO;
@@ -24,7 +25,6 @@ public class GaussianSplatUI : MonoBehaviour
 
     float3[] posFloatArray;
     NativeArray<byte> m_OutputFloat32;
-
 
     void Start()
     {
@@ -51,7 +51,7 @@ public class GaussianSplatUI : MonoBehaviour
                 {
                     result |= (ulong)data[k] << (k * 8);
                 }
-                float3 value = DecodeNorm16ToFloat3(result);
+                float3 value = GaussianSplatAssetRuntimeCreator.DecodeNorm16ToFloat3(result);
                 posFloatArray[i / 6].x = value.x;
                 posFloatArray[i / 6].y = value.y;
                 posFloatArray[i / 6].z = value.z;
@@ -133,6 +133,13 @@ public class GaussianSplatUI : MonoBehaviour
         gsRenderer.gameObject.GetComponent<Rotate>().enabled = toggle.isOn;
     }
 
+    public void SetGSUpsideDown(UnityEngine.UI.Toggle toggle)
+    {
+        var rotation = gsRenderer.gameObject.transform.eulerAngles;
+        rotation.x = 180;
+        gsRenderer.gameObject.transform.eulerAngles = rotation;
+    }
+
     public void DisplayColorPicker()
     {
         colorPicker.gameObject.SetActive(!colorPicker.gameObject.activeSelf);
@@ -162,54 +169,81 @@ public class GaussianSplatUI : MonoBehaviour
     private void SetPositionNoise()
     {
         isComputing = true;
-        unsafe
+
+        if (gsRenderer.m_Asset != null)
         {
-            switch (gsRenderer.m_Asset.posFormat)
+            unsafe
             {
-                case GaussianSplatAsset.VectorFormat.Float32:
-                    for (int i = 0; i < gsRenderer.m_Asset.splatCount; i++)
-                    {
-                        byte* outputPtr = (byte*)m_OutputFloat32.GetUnsafePtr() + i * 12;
+                switch (gsRenderer.m_Asset.posFormat)
+                {
+                    case GaussianSplatAsset.VectorFormat.Float32:
+                        for (int i = 0; i < gsRenderer.m_Asset.splatCount; i++)
+                        {
+                            byte* outputPtr = (byte*)m_OutputFloat32.GetUnsafePtr() + i * 12;
 
-                        float maxNoise = noiseAmount;
-                        *(float*)outputPtr = posFloatArray[i].x + UnityEngine.Random.Range(-maxNoise, maxNoise);
-                        *(float*)(outputPtr + 4) = posFloatArray[i].y + UnityEngine.Random.Range(-maxNoise, maxNoise);
-                        *(float*)(outputPtr + 8) = posFloatArray[i].z + UnityEngine.Random.Range(-maxNoise, maxNoise);
-                    }
+                            float maxNoise = noiseAmount;
+                            *(float*)outputPtr = posFloatArray[i].x + UnityEngine.Random.Range(-maxNoise, maxNoise);
+                            *(float*)(outputPtr + 4) = posFloatArray[i].y + UnityEngine.Random.Range(-maxNoise, maxNoise);
+                            *(float*)(outputPtr + 8) = posFloatArray[i].z + UnityEngine.Random.Range(-maxNoise, maxNoise);
+                        }
 
-                    gsRenderer.m_GpuPosData.SetData(m_OutputFloat32);
-                    break;
-                case GaussianSplatAsset.VectorFormat.Norm16:
-                    for (int i = 0; i < gsRenderer.m_Asset.splatCount; i++)
-                    {
-                        float maxNoise = noiseAmount;
-                        float3 position = posFloatArray[i];
-                        position.x = posFloatArray[i].x + UnityEngine.Random.Range(-maxNoise, maxNoise);
-                        position.y = posFloatArray[i].y + UnityEngine.Random.Range(-maxNoise, maxNoise);
-                        position.z = posFloatArray[i].z + UnityEngine.Random.Range(-maxNoise, maxNoise);
+                        gsRenderer.m_GpuPosData.SetData(m_OutputFloat32);
+                        break;
+                    case GaussianSplatAsset.VectorFormat.Norm16:
+                        for (int i = 0; i < gsRenderer.m_Asset.splatCount; i++)
+                        {
+                            float maxNoise = noiseAmount;
+                            float3 position = posFloatArray[i];
+                            position.x = posFloatArray[i].x + UnityEngine.Random.Range(-maxNoise, maxNoise);
+                            position.y = posFloatArray[i].y + UnityEngine.Random.Range(-maxNoise, maxNoise);
+                            position.z = posFloatArray[i].z + UnityEngine.Random.Range(-maxNoise, maxNoise);
 
-                        byte* outputPtr = (byte*)m_OutputNorm16.GetUnsafePtr() + i * 6;
-                        ulong enc = EncodeFloat3ToNorm16(math.saturate(position));
-                        *(uint*)outputPtr = (uint)enc;
-                        *(ushort*)(outputPtr + 4) = (ushort)(enc >> 32);
-                    }
-                    gsRenderer.m_GpuPosData.SetData(m_OutputNorm16);
-                    break;
+                            byte* outputPtr = (byte*)m_OutputNorm16.GetUnsafePtr() + i * 6;
+                            ulong enc = GaussianSplatAssetRuntimeCreator.EncodeFloat3ToNorm16(math.saturate(position));
+                            *(uint*)outputPtr = (uint)enc;
+                            *(ushort*)(outputPtr + 4) = (ushort)(enc >> 32);
+                        }
+                        gsRenderer.m_GpuPosData.SetData(m_OutputNorm16);
+                        break;
+                }
             }
+        }
+        else
+        {
+            // position of newly loaded ply
+            float3[] newPositions = new float3[gsRenderer.splatCount];
+
+            float maxNoise = noiseAmount;
+            for (int i = 0; i < gsRenderer.splatCount; i++)
+            {
+                float x = BitConverter.ToSingle(posDataBytes, i * 12);
+                newPositions[i].x = x;
+                float y = BitConverter.ToSingle(posDataBytes, i * 12 + 4);
+                newPositions[i].y = y;
+                float z = BitConverter.ToSingle(posDataBytes, i * 12 + 8);
+                newPositions[i].z = z;
+
+                unsafe
+                {
+                    byte* outputPtr = (byte*)m_OutputFloat32.GetUnsafePtr() + i * 12;
+
+                    *(float*)outputPtr = newPositions[i].x + UnityEngine.Random.Range(-maxNoise, maxNoise);
+                    *(float*)(outputPtr + 4) = newPositions[i].y + UnityEngine.Random.Range(-maxNoise, maxNoise);
+                    *(float*)(outputPtr + 8) = newPositions[i].z + UnityEngine.Random.Range(-maxNoise, maxNoise);   
+                }
+            }
+            gsRenderer.m_GpuPosData.SetData(m_OutputFloat32);
         }
         isComputing = false;
     }
 
-    static float3 DecodeNorm16ToFloat3(ulong encoded)
+    public void StorePositionsForNewLoadedPly()
     {
-        float x = (encoded & 0xFFFF) / 65535.5f;
-        float y = ((encoded >> 16) & 0xFFFF) / 65535.5f;
-        float z = ((encoded >> 32) & 0xFFFF) / 65535.5f;
-        return new float3(x, y, z);
-    }
-
-    static ulong EncodeFloat3ToNorm16(float3 v) // 48 bits: 16.16.16
-    {
-        return (ulong)(v.x * 65535.5f) | ((ulong)(v.y * 65535.5f) << 16) | ((ulong)(v.z * 65535.5f) << 32);
+        PositionNoiseSlider.value = 0;
+        m_OutputFloat32.Dispose();
+        m_OutputFloat32 = new NativeArray<byte>(gsRenderer.splatCount * 12, Allocator.Persistent);
+        byte[] positions = new byte[gsRenderer.splatCount *4 * 3];
+        gsRenderer.m_GpuPosData.GetData(positions);
+        posDataBytes = positions;
     }
 }

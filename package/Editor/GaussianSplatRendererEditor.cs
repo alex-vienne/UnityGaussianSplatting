@@ -160,8 +160,11 @@ namespace GaussianSplatting.Editor
 
             if (validAndEnabled && targets.Length == 1)
             {
-                EditCameras(gs);
-                EditGUI(gs);
+                if (gs.asset != null)
+                {
+                    EditCameras(gs);
+                    EditGUI(gs);
+                }
             }
             if (validAndEnabled && targets.Length > 1)
             {
@@ -331,40 +334,44 @@ namespace GaussianSplatting.Editor
             bool modifiedOrHasCutouts = gs.editModified || hasCutouts;
 
             var asset = gs.asset;
-            EditorGUILayout.Space();
-            EditorGUI.BeginChangeCheck();
-            m_ExportBakeTransform = EditorGUILayout.Toggle("Export in world space", m_ExportBakeTransform);
-            if (EditorGUI.EndChangeCheck())
-            {
-                EditorPrefs.SetBool(kPrefExportBake, m_ExportBakeTransform);
-            }
 
-            if (GUILayout.Button("Export PLY"))
-                ExportPlyFile(gs, m_ExportBakeTransform);
-            if (asset.posFormat > GaussianSplatAsset.VectorFormat.Norm16 ||
-                asset.scaleFormat > GaussianSplatAsset.VectorFormat.Norm16 ||
-                asset.colorFormat > GaussianSplatAsset.ColorFormat.Float16x4 ||
-                asset.shFormat > GaussianSplatAsset.SHFormat.Float16)
+            if (asset != null)
             {
-                EditorGUILayout.HelpBox(
-                    "It is recommended to use High or VeryHigh quality preset for editing splats, lower levels are lossy",
-                    MessageType.Warning);
-            }
-
-            bool displayEditStats = isToolActive || modifiedOrHasCutouts;
-            EditorGUILayout.Space();
-            EditorGUILayout.LabelField("Splats", $"{gs.splatCount:N0}");
-            if (displayEditStats)
-            {
-                EditorGUILayout.LabelField("Cut", $"{gs.editCutSplats:N0}");
-                EditorGUILayout.LabelField("Deleted", $"{gs.editDeletedSplats:N0}");
-                EditorGUILayout.LabelField("Selected", $"{gs.editSelectedSplats:N0}");
-                if (hasCutouts)
+                EditorGUILayout.Space();
+                EditorGUI.BeginChangeCheck();
+                m_ExportBakeTransform = EditorGUILayout.Toggle("Export in world space", m_ExportBakeTransform);
+                if (EditorGUI.EndChangeCheck())
                 {
-                    if (s_EditStatsUpdateCounter > 10)
+                    EditorPrefs.SetBool(kPrefExportBake, m_ExportBakeTransform);
+                }
+
+                if (GUILayout.Button("Export PLY"))
+                    ExportPlyFile(gs, m_ExportBakeTransform);
+                if (asset.posFormat > GaussianSplatAsset.VectorFormat.Norm16 ||
+                    asset.scaleFormat > GaussianSplatAsset.VectorFormat.Norm16 ||
+                    asset.colorFormat > GaussianSplatAsset.ColorFormat.Float16x4 ||
+                    asset.shFormat > GaussianSplatAsset.SHFormat.Float16)
+                {
+                    EditorGUILayout.HelpBox(
+                        "It is recommended to use High or VeryHigh quality preset for editing splats, lower levels are lossy",
+                        MessageType.Warning);
+                }
+
+                bool displayEditStats = isToolActive || modifiedOrHasCutouts;
+                EditorGUILayout.Space();
+                EditorGUILayout.LabelField("Splats", $"{gs.splatCount:N0}");
+                if (displayEditStats)
+                {
+                    EditorGUILayout.LabelField("Cut", $"{gs.editCutSplats:N0}");
+                    EditorGUILayout.LabelField("Deleted", $"{gs.editDeletedSplats:N0}");
+                    EditorGUILayout.LabelField("Selected", $"{gs.editSelectedSplats:N0}");
+                    if (hasCutouts)
                     {
-                        gs.UpdateEditCountsAndBounds();
-                        s_EditStatsUpdateCounter = 0;
+                        if (s_EditStatsUpdateCounter > 10)
+                        {
+                            gs.UpdateEditCountsAndBounds();
+                            s_EditStatsUpdateCounter = 0;
+                        }
                     }
                 }
             }
