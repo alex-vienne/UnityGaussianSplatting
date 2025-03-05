@@ -7,9 +7,6 @@ using System.IO;
 using System;
 using Unity.Mathematics;
 using GaussianSplatting.Runtime;
-using Unity.Profiling.LowLevel;
-using Unity.Profiling;
-using UnityEditor;
 
 namespace GaussianSplatting.RuntimeCreator
 {
@@ -26,6 +23,40 @@ namespace GaussianSplatting.RuntimeCreator
             public float opacity;
             public Vector3 scale;
             public Quaternion rot;
+        }
+
+
+        public unsafe static NativeArray<InputSplatData> LoadPLYSplatFile(byte[] plyBytes)
+        {
+            NativeArray<InputSplatData> data = default;
+
+            int splatCount;
+            int vertexStride;
+            NativeArray<byte> verticesRawData;
+            try
+            {
+                PLYFileReader.ReadFile(plyBytes, out splatCount, out vertexStride, out _, out verticesRawData);
+            }
+            catch (Exception ex)
+            {
+                // m_ErrorMessage = ex.Message;
+                return data;
+            }
+
+            if (UnsafeUtility.SizeOf<InputSplatData>() != vertexStride)
+            {
+                // m_ErrorMessage = $"PLY vertex size mismatch, expected {UnsafeUtility.SizeOf<InputSplatData>()} but file has {vertexStride}";
+                return data;
+            }
+
+            // reorder SHs
+            NativeArray<float> floatData = verticesRawData.Reinterpret<float>(1);
+            ReorderSHs(splatCount, (float*)floatData.GetUnsafePtr());
+
+            data = verticesRawData.Reinterpret<InputSplatData>(1);
+            LinearizeData(data);
+            return data;
+
         }
 
         public unsafe static NativeArray<InputSplatData> LoadPLYSplatFile(string plyPath)

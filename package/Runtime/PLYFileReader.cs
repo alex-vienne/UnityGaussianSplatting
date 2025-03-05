@@ -6,6 +6,7 @@ using Unity.Collections;
 using UnityEngine;
 using System.Linq;
 using System.Runtime.Serialization.Formatters.Binary;
+using System.Collections;
 
 
 public static class PLYFileReader
@@ -91,6 +92,17 @@ public static class PLYFileReader
             }
         }
         //Debug.Log($"PLY {filePath} vtx {vertexCount} stride {vertexStride} attrs #{attrNames.Count} {string.Join(',', attrNames)}");
+    }
+
+    public static void ReadFile(byte[] plyBytes, out int vertexCount, out int vertexStride, out List<string> attrNames, out NativeArray<byte> vertices)
+    {
+        using var ms = new MemoryStream(plyBytes);
+        ReadHeaderImpl(out vertexCount, out vertexStride, out attrNames, ms);
+
+        vertices = new NativeArray<byte>(vertexCount * vertexStride, Allocator.Persistent);
+        var readBytes = ms.Read(vertices);
+        if (readBytes != vertices.Length)
+            throw new IOException($"PLY read error, expected {vertices.Length} data bytes got {readBytes}");
     }
 
     public static void ReadFile(string filePath, out int vertexCount, out int vertexStride, out List<string> attrNames, out NativeArray<byte> vertices)

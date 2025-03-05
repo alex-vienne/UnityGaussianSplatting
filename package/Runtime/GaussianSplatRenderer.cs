@@ -229,6 +229,9 @@ namespace GaussianSplatting.Runtime
 
         public bool m_IsInitialized = false;
 
+        [HideInInspector]
+        public byte[] positionArray = null;
+
         public GaussianSplatAsset m_Asset;
 
         [Range(0.1f, 2.0f)] [Tooltip("Additional scaling factor for the splats")]
@@ -407,7 +410,12 @@ namespace GaussianSplatting.Runtime
 
         const int kGpuViewDataSize = 40;
 
-        public void CreateResourcesForAsset(string plyFile)
+        public void CreateResourcesForAsset(byte[] plyByte)
+        {
+            CreateResourcesForAsset(null, plyByte);
+        }
+
+        public void CreateResourcesForAsset(string plyFile, byte[] plyByte = null)
         {
             HasValidPLY = false;
             Tuple<int, int> widthHeight;
@@ -416,7 +424,14 @@ namespace GaussianSplatting.Runtime
             if (!HasValidAsset)
             {
                 // todo
-                ReadDatafromPLY(plyFile, out widthHeight, out splats, out texFormat);
+                if (plyFile != null)
+                {
+                    ReadDatafromPLY(plyFile, out widthHeight, out splats, out texFormat);
+                }
+                else if(plyByte != null)
+                {
+                    ReadDatafromPLY(plyByte, out widthHeight, out splats, out texFormat);
+                }
                 return;
             }
             else
@@ -493,11 +508,33 @@ namespace GaussianSplatting.Runtime
             InitSortBuffers(splatCount);
         }
 
+        private void ReadDatafromPLY(byte[] plyBytes, out Tuple<int, int> widthHeight, out NativeArray<GaussianSplatAssetRuntimeCreator.InputSplatData> splats, out GraphicsFormat texFormat)
+        {
+            ReadDatafromPLY(null, plyBytes, out widthHeight, out splats, out texFormat);
+        }
+
         private void ReadDatafromPLY(string plyFile, out Tuple<int, int> widthHeight, out NativeArray<GaussianSplatAssetRuntimeCreator.InputSplatData> splats, out GraphicsFormat texFormat)
+        {
+            ReadDatafromPLY(plyFile, null, out widthHeight, out splats, out texFormat);
+        }
+
+        private void ReadDatafromPLY(string plyFile, byte[] plyBytes, out Tuple<int, int> widthHeight, out NativeArray<GaussianSplatAssetRuntimeCreator.InputSplatData> splats, out GraphicsFormat texFormat)
         {
             widthHeight = new Tuple<int, int>(0, 0);
             texFormat = new GraphicsFormat();
-            splats = GetDataFromPLY(plyFile);
+            if (plyFile != null)
+            {
+                splats = GetDataFromPLY(plyFile);
+            }
+            else if (plyBytes != null)
+            {
+                splats = GetDataFromPLY(null, plyBytes);
+            }
+            else
+            {
+                splats = new NativeArray<GaussianSplatAssetRuntimeCreator.InputSplatData> { };
+            }
+
             if (splats.Length > 0)
             {
                 GetSplatPositionsFromInputSplatData(splats);
@@ -1258,20 +1295,23 @@ namespace GaussianSplatting.Runtime
             m_GpuPosData = new GraphicsBuffer(GraphicsBuffer.Target.Raw | GraphicsBuffer.Target.CopySource, (int)(m_SplatCount * 4), 4) { name = "GaussianPosData" };
 
             var pos = inputSplats.Select(x => x.pos).ToArray();
-            unsafe
-            {
-                NativeArray<byte> m_OutputFloat32 = new NativeArray<byte>(splatCount * 12, Allocator.Temp);
-                for (int i = 0; i < splatCount; i++)
+            NativeArray<byte> m_OutputFloat32 = new NativeArray<byte>(splatCount * 12, Allocator.Temp);
+
+            for (int i = 0; i < splatCount; i++)
+            {   
+                unsafe
                 {
                     byte* outputPtr2 = (byte*)m_OutputFloat32.GetUnsafePtr() + i * 12;
-
                     *(float*)outputPtr2 = pos[i].x;
                     *(float*)(outputPtr2 + 4) = pos[i].y;
-                    *(float*)(outputPtr2 + 8) = pos[i].z;
-                }
-                var array = m_OutputFloat32.Reinterpret<uint>(1);
-                m_GpuPosData.SetData(array);
+                    *(float*)(outputPtr2 + 8) = pos[i].z;            
+                }  
             }
+
+            positionArray = m_OutputFloat32.ToRawBytes();
+
+            var array = m_OutputFloat32.Reinterpret<uint>(1);
+            m_GpuPosData.SetData(array);
         }
 
         private void GetSplatOthersFromInputSplatData(NativeArray<GaussianSplatAssetRuntimeCreator.InputSplatData> inputSplats)
@@ -1335,7 +1375,9 @@ namespace GaussianSplatting.Runtime
         private void GetSplatSHFromInputSplatData(NativeArray<GaussianSplatAssetRuntimeCreator.InputSplatData> inputSplats)
         {
             DisposeBuffer(ref m_GpuSHData);
+
             m_GpuSHData = new GraphicsBuffer(GraphicsBuffer.Target.Raw, splatCount * 12 * 16, 4) { name = "GaussianSHData" };
+
             unsafe
             {
                 var m_Format = GaussianSplatAsset.SHFormat.Float32;
@@ -1464,15 +1506,17 @@ namespace GaussianSplatting.Runtime
             m_GpuColorData = tex;
         }
 
-        private NativeArray<GaussianSplatAssetRuntimeCreator.InputSplatData> GetDataFromPLY(string plyFile)
+        private NativeArray<GaussianSplatAssetRuntimeCreator.InputSplatData> GetDataFromPLY(string plyFile, byte[] plyBytes = null)
         {
             //TextAsset plyFile = Resources.Load("gs_primevere_long-edit") as TextAsset;
 
-            NativeArray<GaussianSplatAssetRuntimeCreator.InputSplatData> inputSplats = new NativeArray<GaussianSplatAssetRuntimeCreator.InputSplatData>();
+            NativeArray<GaussianSplatAssetRuntimeCreator.InputSplatData> inputSplats = new NativeArray<GaussianSplatAssetRuntimeCreator.InputSplatData>( );
             //inputSplats = GaussianSplatAssetRuntimeCreator.LoadPLYSplatFile("./Assets/GaussianAssets/gs_primevere_long-edit.ply");
 
-            if (plyFile == null)
+            if (plyFile == null && plyBytes != null)
             {
+                inputSplats = GaussianSplatAssetRuntimeCreator.LoadPLYSplatFile(plyBytes);
+                
                 //inputSplats = GaussianSplatAssetRuntimeCreator.LoadPLYSplatFile(Application.streamingAssetsPath + "/gs_primevere_long-edit.ply");
                 //inputSplats = GaussianSplatAssetRuntimeCreator.LoadPLYSplatFile(plyFile);
                 //inputSplats = GaussianSplatAssetRuntimeCreator.LoadPLYSplatFile("./Assets/GaussianAssets/gs_Kaizen_inside_and_outside-edit.ply");
@@ -1488,6 +1532,8 @@ namespace GaussianSplatting.Runtime
             }
 
             m_SplatCount = inputSplats.Length;
+
+            Debug.Log("SplatCount : " + m_SplatCount.ToString());
 
             unsafe
             {

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en-us">
   <head>
     <meta charset="utf-8">
@@ -52,12 +52,12 @@
       }
 
       var buildUrl = "Build";
-      var loaderUrl = buildUrl + "/Build_deploy.loader.js";
+      var loaderUrl = buildUrl + "/Build.loader.js";
       var config = {
         arguments: [],
-        dataUrl: buildUrl + "/Build_deploy.data",
-        frameworkUrl: buildUrl + "/Build_deploy.framework.js",
-        codeUrl: buildUrl + "/Build_deploy.wasm",
+        dataUrl: buildUrl + "/Build.data",
+        frameworkUrl: buildUrl + "/Build.framework.js",
+        codeUrl: buildUrl + "/Build.wasm",
         streamingAssetsUrl: "StreamingAssets",
         companyName: "DefaultCompany",
         productName: "UnityGaussianSplatting",
@@ -115,10 +115,24 @@
                   unityInstance.SetFullscreen(1);
                 };
 
+				const gameContainer = document.getElementById('unity-canvas');
+				gameContainer.addEventListener('dragover', (event) => {
+							event.preventDefault();
+				});
+				gameContainer.addEventListener('drop', (event) => {
+					event.preventDefault();
+					const files = event.dataTransfer.files;
+					const first = files[0];
+					unityInstance.SendMessage("FileReceiver", "FileSelected", window.URL.createObjectURL(first), first);
+				});		
+
+
               }).catch((message) => {
                 alert(message);
               });
             };
+			
+	  
 
       document.body.appendChild(script);
 
