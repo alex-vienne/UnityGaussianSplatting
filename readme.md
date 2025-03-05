@@ -8,6 +8,7 @@ Splat Outline</br>
 Splat Position noise</br>
 
 The windows output enable the drag and drop of a PLY file on the app.
+The WebGPU output also enable the drag and drop of a PLY file on the web app.
 
 ![Screenshot](/docs/Images/primevers.png?raw=true "Screenshot")
 
